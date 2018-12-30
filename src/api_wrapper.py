@@ -221,14 +221,6 @@ def save_to_log(starttime, response_data: dict, price: float, amount: float):
     with open(f"log/{print_logtime(logging=True)[1:-1]}:00.log", 'a') as f:
         f.write(json.dumps(log) + '\n')
         f.close()
-        if time.time() - starttime >= 3600:
-
-            tx_list = create_list(stat_object=f"log/{print_logtime(logging=True)[1:-1]}:00.log")
-            data = '{"user_id": "' + b1.id + '", "tx_list": [' + ','.join(tx_list) + ']}'
-            if send_data(data=data):
-                clear_log(f"log/{print_logtime(logging=True)[1:-1]}:00.log")
-            else:
-                pass
 
 
 def clear(b1: Bitmax, b2: Bitmax):
@@ -282,6 +274,10 @@ if __name__ == '__main__':
         scheduler = BackgroundScheduler(daemon=True)
         scheduler.add_job(lambda: clear(b1, b2), 'interval', minutes=3)
         scheduler.start()
+        # add scheduler send stat
+        send_stat = BackgroundScheduler(daemon=True)
+        send_stat.add_job(lambda: send_trx(logfile=f"log/{print_logtime(logging=True)[1:-1]}:00.log"), 'interval', minutes=3600)
+        send_stat.start()
 
         if data and data.decode('utf-8') == 'True':
             first_tik = tik()
