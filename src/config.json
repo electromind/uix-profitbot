@@ -1,0 +1,70 @@
+{
+  "settings":
+  {
+    "pair": "ETH/BTC",
+    "recheck_bounds": 10,
+    "price_tactic": "center"
+  },
+  "bots":
+    [
+      {
+        "login": "yuliianovak1992@gmail.com",
+        "ref_id": "albinabevzenko95@gmail.com",
+        "api": "38HPCbSYOQdOmc6LavCLsRpDM1z0QvQH",
+        "secret": "20yCeQsFOoROzr264SM4lAlrvuXewH0Ttg1h0CD7FF0JHbQqgUIxnJnMVHYuasta",
+        "eth_wallet": "0x70d78ba90d49d8125c3b1b368dbcd7f1aaacbf65",
+        "btmx_wallet": "0x70d78ba90d49d8125c3b1b368dbcd7f1aaacbf65",
+        "xrp_wallet": "rpinhtY4p35bPmVXPbfWRUtZ1w1K1gYShB",
+        "xrp_tag": "14560",
+        "btc_wallet": "3NWqusRDbN4cD9G1CzqWWCe5qRsWe8Ng5Z",
+        "usdt_wallet": "1JKo2GWqvb8pDaxFXrov69cHu7Z1xiTfCs",
+        "id": "ZtU9xaOBNigA47Sy5NUA3oxR57UrQOju"
+      },
+      {
+        "login": "levenetsartur87@gmail.com",
+        "ref_id": "tetianapolischuk87@gmail.com",
+        "api": "m2FpSvW9e87LUaXd4NUM6HPRu0ntwAWm",
+        "secret": "3QhxxCp7EX5qTRHr6ykkYWCN5fxm3qHDydnvXpLO7YNLvIuP0IGOIkfVnu2B7uRX",
+        "eth_wallet": "0x74d76a9b7b9efe374862475ef67c9d4434cc71a1",
+        "btmx_wallet": "0x74d76a9b7b9efe374862475ef67c9d4434cc71a1",
+        "xrp_wallet": "rpinhtY4p35bPmVXPbfWRUtZ1w1K1gYShB",
+        "xrp_tag": "14561",
+        "btc_wallet": "36adreEbyywyhL4B7TR3GtfLRCyNJ1oGKk",
+        "usdt_wallet": "1GyrZdMEW3GbuALMftMBZNKuE8qWrfzGf7",
+        "id": "5wUprBKI7DWFgZMmxbujygOCRb8T1ivV"
+      },
+      {
+        "login": "albinabevzenko95@gmail.com",
+        "ref_id": "serhiipolishchuk86@gmail.com",
+        "api": "LQFw6UwEDGcu37OlF6rWc7iW7rEJhQ8J",
+        "secret": "B6juaSWXgw8X6yflKIpLLGvreF9fm5VPPVJbN2HshDb6bHRoBGJ61AZuHPtOd0D0",
+        "eth_wallet": "0x484caf7f993c3f5d6000cc4ef34bb06cd3e9e3aa",
+        "btmx_wallet": "0x484caf7f993c3f5d6000cc4ef34bb06cd3e9e3aa",
+        "xrp_wallet": "rpinhtY4p35bPmVXPbfWRUtZ1w1K1gYShB",
+        "xrp_tag": "14510",
+        "btc_wallet": "37aDS8CSpdCFtXdzB5FHHgABr5W7Mm9Mdn",
+        "usdt_wallet": "1J4qCfkw97v8BLR1R5smTtvt3rFWZBE8Az",
+        "id": "Uc5p62IWAeiiVEy7GfzOgWj5DmmytMVl"
+      },
+      {
+        "login": "tetianapolischuk87@gmail.com",
+        "ref_id": "serhiipolishchuk86@gmail.com",
+        "api": "UZgZchzUJteqfJqg810EAj7DhTqOuls0",
+        "secret": "oQBaFqC9tCs0v2OLzOXPGYsgo5ydKx4GzKil4QnuQsiJQUCpCYbCVwRMRA4sPYLt",
+        "eth_wallet": "0x90050aff6d1b9caf577e8a9d9cde25ae6ce68e30",
+        "btmx_wallet": "0x90050aff6d1b9caf577e8a9d9cde25ae6ce68e30",
+        "xrp_wallet": "rpinhtY4p35bPmVXPbfWRUtZ1w1K1gYShB",
+        "xrp_tag": "14509",
+        "btc_wallet": "3FioK6EeQCjR4HPDHBcutdowbRvhWaYd9z",
+        "usdt_wallet": "1L8KHpgXMyuGRXK4ceZJWWLVTTSJ4CnBJZ",
+        "id": "Y7naF7oRIgwe9Nj5yiW48De3LLuxh1r5"
+      },
+      {
+        "login": "serhiipolishchuk86@gmail.com",
+        "ref_id": "None",
+        "api": "ePtaRXHh0cWyXrPgm1W30X8pND3SPhfu",
+        "secret": "1ga5FMmJAjJ82Df2DtGlnttaRQzKLzA7WwhtUvss15ZBWTcD4XAOF8AQ3fgj3PRF",
+        "id": "DSlb6wq7euKTTsYZtwIjEhwAt2ELUlBa"
+      }
+    ]
+}
