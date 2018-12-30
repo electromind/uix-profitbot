@@ -38,12 +38,3 @@ def clear_log(filename='examples.txt'):
     except Exception as e:
         print(e)
 
-
-def send_trx(logfile="example.txt"):
-    tx_list = create_list(stat_object=logfile)
-    data = '{"user_id": "' + b1.id + '", "tx_list": [' + ','.join(tx_list) + ']}'
-    if send_data(data=data):
-        clear_log(logfile)
-        print("Statistics send successfully")
-    else:
-        pass
