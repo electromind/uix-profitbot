@@ -221,14 +221,6 @@ def save_to_log(starttime, response_data: dict, price: float, amount: float):
     with open(f"log/{print_logtime(logging=True)[1:-1]}:00.log", 'a') as f:
         f.write(json.dumps(log) + '\n')
         f.close()
-        if time.time() - starttime >= 3600:
-
-            tx_list = create_list(stat_object=f"log/{print_logtime(logging=True)[1:-1]}:00.log")
-            data = '{"user_id": "' + b1.id + '", "tx_list": [' + ','.join(tx_list) + ']}'
-            if send_data(data=data):
-                clear_log(f"log/{print_logtime(logging=True)[1:-1]}:00.log")
-            else:
-                pass
 
 
 def clear(b1: Bitmax, b2: Bitmax):
@@ -267,6 +259,15 @@ def find_maker(b1: Bitmax, b2: Bitmax, bal1, bal2, price):
     #             b2.is_maker = False
     #             return {'price': price, 'asset': 'ETH', 'amount': float(max_b2[0]), 'side': 'sell', 'c_side': 'buy'}
 
+def send_trx(logfile="example.txt"):
+    tx_list = create_list(stat_object=logfile)
+    data = '{"user_id": "' + b1.id + '", "tx_list": [' + ','.join(tx_list) + ']}'
+    if send_data(data=data):
+        clear_log(logfile)
+        print("Statistics send successfully")
+    else:
+        print("No send")
+
 
 if __name__ == '__main__':
     b1, b2 = setup()
@@ -282,6 +283,10 @@ if __name__ == '__main__':
         scheduler = BackgroundScheduler(daemon=True)
         scheduler.add_job(lambda: clear(b1, b2), 'interval', minutes=3)
         scheduler.start()
+        # add scheduler send stat
+        send_stat = BackgroundScheduler(daemon=True)
+        send_stat.add_job(lambda: send_trx(logfile=f"log/{print_logtime(logging=True)[1:-1]}:00.log"), trigger='interval', minutes=60)
+        send_stat.start()
 
         if data and data.decode('utf-8') == 'True':
             first_tik = tik()
@@ -292,7 +297,6 @@ if __name__ == '__main__':
                 b2.lastBuyPrice = first_tik.get('buy')
                 b2.lastSellPrice = first_tik.get('sell')
             print('\tSTART REVERSE MINING\t'.join(['*' * 40, '*' * 40]))
-            start_time = time.time()
 
             while True:
                 global price

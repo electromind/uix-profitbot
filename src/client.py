@@ -37,3 +37,4 @@ def clear_log(filename='examples.txt'):
         desc.close()
     except Exception as e:
         print(e)
+
