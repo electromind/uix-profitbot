@@ -1,70 +1,29 @@
 # -*- coding: utf-8 -*-
-import os
 from typing import Dict, Any, Union
 import sys
-from bot_utils import send_request, get_utc_timestamp, uuid32, get_logger, time_prefix
+from utils import send_request, utc_timestamp, time_prefix, uuid32
 from datetime import datetime
-from socket import socket
-from websocket import create_connection
-import multiprocessing
-
-
-testnet_url = 'https://bitmax-test.io/'
-mainnet_url = 'https://bitmax.io/'
-websocket_url = 'wss://bitmax.io/'
-logger = get_logger('api')
 
 
 class Bitmax:
-    recieved_data: bytes
 
-    def __init__(self, user=None, base_url='https://bitmax.io/', pair=None):
-        try:
-            if user:
-                self.email = user.get('login_name')
+    def __init__(self, user=None, base_url='https://bitmax.io/'):
+        if user:
+            try:
+                self.email = user.get('login')
                 self.base_url = base_url
-                self.api_key = user.get('api_key')
+                self.api_key = user.get('api')
                 self.secret = user.get('secret')
                 self.id = user.get('id')
                 self.account_group = self._get_user_info()
+                self.lastSellPrice = 0.0
+                self.lastBuyPrice = 0.0
                 self.is_maker = False
-                self.open_orders = []
-
-                if pair is None:
-                    time_prefix()
-                    print('Invalid Pair or missing')
-                    sys.exit(1)
-                else:
-                    self.pair = pair
-            else:
-                raise AttributeError(
-                    'Cant create bot instance, user credentials missing. Please check config file and try again')
-        except AttributeError as e:
-            print(f"\n{e}")
-
-    def auth(self):
-        with socket() as s:
-            try:
-                s.settimeout(10)
-                s.connect(('109.104.178.163', 2511))
-            except ConnectionError as e:
-                print(f"{e.strerror}\n{e}")
-                sys.exit('No connection to server')
-
-            auth_string = f"auth_me:{self.id}".encode('utf-8')
-            s.send(auth_string)
-            tmp_data = s.recv(1024)
-            resp = str(tmp_data, encoding='utf-8')
-            if resp == 'True':
-                time_prefix()
-                print(f'{self.email}\tauthorized.')
-                s.close()
-                return True
-            else:
-                time_prefix()
-                print('Invalid Key. Please recheck config file.')
-                s.close()
-                return False
+                #print(f"\t{user.get('login')} created")
+            except AttributeError as err:
+                print(f"\n{err.args}")
+        else:
+            raise Exception('Bot init error')
 
     def _get_user_info(self):
         resp = send_request(
@@ -74,36 +33,34 @@ class Bitmax:
             api_path='user/info',
             api_key=self.api_key,
             api_sec=self.secret,
-            ts=get_utc_timestamp()
+            ts=utc_timestamp()
         )
         return resp.get('accountGroup')
 
-# ############## request asset list or single asset ############## #
-
+############### request asset list or single asset ###############
     @classmethod
-    def request_assets(cls):
+    def _request_assets(cls):
         try:
             assets = send_request(method='GET', base_path='api/v1/assets')
             return assets
-        except Exception as e:
-            time_prefix()
-            print(f'invalid request \t{cls.request_assets.__name__}\n{e}')
+        except Exception as err:
+            print(f'invalid data of requesting asset list.\n{err.args}')
             return sys.exit(1)
 
     @classmethod
     def get_assets(cls) -> dict:
-        working_assets = dict()
-        for a in cls.request_assets():
-            if a.get('status') == 'Normal':
-                working_assets[a['assetCode']] = {
-                        'id': a.get('assetCode'),
-                        'name': a.get('assetName'),
-                        'step': round(0.1 ** (a.get('nativeScale')), int(a.get('nativeScale'))),
-                        'nativeScale': a.get('nativeScale')
+        working_assets: Dict[Union[str, Any], Dict[str, Union[float, Any]]] = {}
+        btmx_assets = cls._request_assets()
+        for asset in btmx_assets:
+            if asset.get('status') == 'Normal':
+                working_assets[asset['assetCode']] = {
+                        'id': asset.get('assetCode'),
+                        'name': asset.get('assetName'),
+                        'step': round(0.1 ** (asset.get('nativeScale')), int(asset.get('nativeScale'))),
+                        'nativeScale': asset.get('nativeScale')
                     }
             else:
                 continue
-
         return working_assets
 
     @classmethod
@@ -119,7 +76,7 @@ class Bitmax:
             print("Wrong asset type")
             return sys.exit(1)
 
-# ############## trade pair methods ############## #
+############### trade pair methods ###############
     @staticmethod
     def get_pair_info(pair=None) -> Dict[Union[str, Any], Dict[str, Union[float, Any]]]:
         pairs_info = send_request(method='GET', base_path='api/v1/products')
@@ -130,24 +87,25 @@ class Bitmax:
                 try:
                     if item.get('symbol') == pair:
                         return item
-                except KeyError as e:
-
-                    print(f'Asset Code or param is invalid.\n{e}')
+                except KeyError as err:
+                    time_prefix()
+                    print(f'Asset Code or param is invalid.\n{err.args}')
                     sys.exit(1)
 
     @staticmethod
     def get_current_fees():
-        resp = send_request('GET', base_path='api/v1/fees', ts=get_utc_timestamp())
+        resp = send_request('GET', base_path='api/v1/fees', ts=utc_timestamp())
+        #print(f'\t{resp}')
         return resp
 
     @staticmethod
-    def get_tik(pair) -> dict:
-        resp = send_request('GET', base_path=f'api/v1/quote?symbol={pair}', ts=get_utc_timestamp())
+    def get_tik(pair):
+        resp = send_request('GET', base_path=f'api/v1/quote?symbol={pair}', ts=utc_timestamp())
         tiker = dict(
-            buy_price=float(resp.get('askPrice')),
-            buy_size=float(resp.get('bidSize')),
-            sell_price=float(resp.get('bidPrice')),
-            sell_size=float(resp.get('askSize'))
+            buyPrice=float(resp.get('askPrice')),
+            buySize=float(resp.get('bidSize')),
+            sellPrice=float(resp.get('bidPrice')),
+            sellSize=float(resp.get('askSize'))
         )
         return tiker
 
@@ -159,29 +117,42 @@ class Bitmax:
         }
         resp = send_request(method='GET', base_path='api/v1/depth', params=params)
         r = dict(ask=resp.get('asks'), bid=resp.get('bids'))
+        time_prefix()
+        print(f"\tConcurent asks: {r.get('ask')}")
+        time_prefix()
+        print(f"\tConcurent bids: {r.get('bid')}")
         return r
 
-    @staticmethod
-    def pair_info(p: str) -> dict:
-        info = Bitmax.get_pair_info(p)
-        return info
+    # def get_amount(self, price):
+    #     self.canBuy = self.
 
-    def get_balances(self):
+    def get_balances(self, asset=None, pair=None):
         core_path = f'{self.account_group}/api/v1/balance'
-        #base_path = ''.join([core_path, f'/{asset}']) if asset is not None and pair is None else core_path
+        base_path = ''.join([core_path, f'/{asset}']) if asset is not None and pair is None else core_path
+        if pair and asset is None:
+            data = {}
+            for asset in pair.split('/'):
+                base_path = ''.join([core_path, f'/{asset}'])
+                tmp = self.get_balances(asset=asset, pair=None)
+                data[asset] = tmp[asset]
+            return data
         resp = send_request(
             method='GET',
             is_signed=True,
             api_path='balance',
             api_key=self.api_key,
             api_sec=self.secret,
-            ts=get_utc_timestamp(),
-            base_path=core_path
+            ts=utc_timestamp(),
+            base_path=base_path
         )
-        return resp['data']
+
+        tmp = dict()
+        tmp[str(resp['data']['assetCode'])] = float(resp['data']['availableAmount'])
+        self.__setattr__(resp['data']['assetCode'], tmp[resp['data']['assetCode']])
+        return tmp if asset else resp['data']
 
     def create_order(self, price, quantity, symbol, order_type, side):
-        ts = get_utc_timestamp()
+        ts = utc_timestamp()
         coid = uuid32()
         params = dict(
             coid=coid,
@@ -207,7 +178,7 @@ class Bitmax:
         return r
 
     def get_fills_of_order(self, coid):
-        ts = get_utc_timestamp()
+        ts = utc_timestamp()
         res = send_request(
             is_signed=True,
             method='GET',
@@ -228,7 +199,7 @@ class Bitmax:
             return True
 
     def cancel_order_by_id(self, orig_coid, pair):
-        ts = get_utc_timestamp()
+        ts = utc_timestamp()
         coid = uuid32()
         params = {
             'coid': coid,
@@ -250,7 +221,7 @@ class Bitmax:
         return resp
 
     def cancel_open_orders_by_pair_or_all(self, symbol=None):
-        ts = get_utc_timestamp()
+        ts = utc_timestamp()
         if symbol is not None:
             resp = send_request(
                 is_signed=True,
@@ -275,7 +246,7 @@ class Bitmax:
             return resp
 
     def withdraw_asset(self, asset, amount, to_addr):
-        ts = get_utc_timestamp()
+        ts = utc_timestamp()
         coid = uuid32()
         params = dict(
             requestId=coid,
@@ -301,7 +272,7 @@ class Bitmax:
     def get_orders_history(self, start, n, pair, end=datetime.utcnow().timestamp()):
 
         end = end
-        ts = get_utc_timestamp()
+        ts = utc_timestamp()
         if pair is None:
             return False
         else:
@@ -324,49 +295,4 @@ class Bitmax:
             ts=ts,
             params=params)
         return resp['data']
-
-
-class WSBitmax(Bitmax):
-    def __init__(self, ws_url=websocket_url, pair=None, user=None, depths=20, trades=20, *args, **kwargs):
-        if user is None:
-            print("Cant create bot intance without user credentials. Please check config file and try again")
-            sys.exit(1)
-        else:
-            self.user = user
-        if pair is None:
-            print("Cant create bot intance without trade pair name. Please check config file and try again")
-            sys.exit(1)
-        else:
-            self.pair = pair.replace("/", "-")
-        super().__init__(base_url=ws_url, pair=pair, user=user)
-        self.account_group = self._get_user_info()
-        self.entry_point = ''.join([self.base_url, str(self.account_group), '/api/stream/'])
-        self._depths = max(1, int(depths))
-        self._trades = max(1, int(trades))
-
-
-class Order:
-    def __init__(self, amount, price, side, api_key, secret, pair):
-        self.amount = amount
-        self.price = price
-        self.side = side
-        self.key = api_key
-        self.secret = secret
-        self.pair = pair
-        self.id = None
-
-    def place_order(self, path, api_path, **param):
-        if isinstance(path, str) and isinstance(api_path, str):
-            try:
-                coid = uuid32()
-                ts = get_utc_timestamp()
-                params = dict(param)
-            except Exception as e:
-                print(e)
-
-    def get_status(self):
-        if self.id is None:
-            pass
-        else:
-            pass
 

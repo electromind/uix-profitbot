@@ -7,25 +7,27 @@ import hashlib
 import random
 import string
 from datetime import datetime
+import logging
+
+
+def time_prefix():
+    current_time = datetime.now()
+    now = current_time.strftime("[%d-%m-%Y %H:%M:%S:%f]\t")
+    print(f'{now}', end='')
 
 
 def uuid32():
     return ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(32))
 
 
-def utc_timestamp():
+def get_utc_timestamp() -> int:
     tm = datetime.utcnow().timestamp()
     return int(tm * 1e3)
 
 
-def print_logtime(logging=False):
-    init_time = datetime.now()
-    now = init_time.strftime("[%d-%m-%Y %H:%M:%S:%f] ")
-    if not logging:
-        print(f'{now}', end='')
-    else:
-        now = init_time.strftime("[%d-%m-%Y %H]")
-        return f'{now}'
+def get_timestamp() -> str:
+    ts = datetime.now()
+    return ts.strftime("%d-%m-%Y--%H-%M-00")
 
 
 def make_auth_header(timestamp, api_path, api_key, secret, coid=None):
@@ -80,7 +82,26 @@ def send_request(method, base_path, is_signed=False, base_url='https://bitmax.io
         return {'error': f'{err.args}', 'data': f'url: {full_url}\tmethod: {method}\nPARAMS:\n{params}'}
 
 
-def read_config():
+def get_logger(logger_name: str):
+    logger = logging.getLogger(logger_name)
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+        datefmt='%m-%d %H:%M',
+        filename=f'log/main.log')
+    file_handler = logging.FileHandler(''.join(['log/', logger_name, '.log']))
+    file_handler.setLevel(logging.DEBUG)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.ERROR)
+    formatter = logging.Formatter('%(levelname)s - %(asctime)s - %(name)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+    return logger
+
+
+def read_config() -> dict:
     try:
         with open('config.json', 'r') as f:
             config = json.loads(f.read())
@@ -89,13 +110,11 @@ def read_config():
         print(f"{err.args}")
 
 
-def cross_side(side):
+def tx_cross_side(side: str) -> str:
     if side == 'sell':
         return 'buy'
     elif side == 'buy':
         return 'sell'
     else:
-        return None
-
-
+        return ''
 

@@ -1,18 +1,20 @@
 # -*- coding: utf-8 -*-
 import sys
-from utils import read_config, print_logtime, cross_side, uuid32
+from utils import read_config, time_prefix, cross_side, uuid32
 from bitmax_api import Bitmax
 import time
 import os
 import json
 import datetime
 import random
-from client import *
-from constants import INTERVAL
+
+from constants import pricing, pricing_methods
 from apscheduler.schedulers.background import BackgroundScheduler
 
 actual = dict()
 takt = dict()
+pr_t = pricing()
+pr_t.current_method = pricing_methods.CENTER
 
 
 def app_setup():
@@ -30,11 +32,11 @@ def app_setup():
         actual['rev_fee'] = float(fees.get('maker').get('rebate'))
         actual['mining_fee'] = float(fees.get('taker').get('mining'))
     except KeyError as err:
-        print_logtime()
+        time_prefix()
         print(f"Invalid key. Check config file: {err.args}")
         sys.exit(1)
     except Exception as err:
-        print_logtime()
+        time_prefix()
         print(f"Error: {err.args}")
         sys.exit(1)
 
@@ -45,9 +47,9 @@ def team_setup(b1_login=None, b2_login=None):
     if not b1_login and not b2_login:
         bt1 = Bitmax(user=bots[0])
         bt2 = Bitmax(user=bots[1])
-        print_logtime()
+        time_prefix()
         print(f'Bot #1 with login: {bt1.email} created.')
-        print_logtime()
+        time_prefix()
         print(f'Bot #2 with login: {bt2.email} created.')
         return [bt1, bt2]
     elif b1_login and b2_login:
@@ -55,9 +57,9 @@ def team_setup(b1_login=None, b2_login=None):
         for bot in bots:
             if bot.get('login') == b1_login or b2_login:
                 bot_list.append(Bitmax(user=bot))
-            print_logtime()
+            time_prefix()
             print(f'Bot #1 with login: {bt1.email} created.')
-            print_logtime()
+            time_prefix()
             print(f'Bot #2 with login: {bt2.email} created.')
     else:
         print('One of bots is not configured. Please check config file and try again.')
@@ -86,7 +88,7 @@ def setup():
     app_setup()
     tradepair_setup(actual.get('pair'))
     for k, v in actual.items():
-        print_logtime()
+        time_prefix()
         if k == 'l_step':
             print(f"|| INFO ||:\t{actual.get('left')} step: {actual.get('l_step'):.8f}")
         elif k == 'r_step':
@@ -102,11 +104,11 @@ def tik(is_printable=False):
     takt['buy'] = actual_tik.get('sellPrice')
     takt['delta'] = int((takt['sell'] - takt['buy']) / actual.get('l_step'))
     if is_printable:
-        print_logtime()
+        time_prefix()
         print(f"|| INFO ||: Ask / Sell: {actual_tik.get('sellPrice')}")
-        print_logtime()
+        time_prefix()
         print(f"|| INFO ||: Bid / Buy: {actual_tik.get('buyPrice')}")
-        print_logtime()
+        time_prefix()
         print(f"|| INFO ||: Spread: {takt['delta']}")
         return takt
     else:
@@ -115,11 +117,11 @@ def tik(is_printable=False):
 
 def get_balances(bot: Bitmax):
     bot_info = bot.get_balances(pair=actual.get('pair'))
-    print_logtime()
+    time_prefix()
     print(f"|| BALANCE ||:\tAccount: {str(bot.email)[:3]}*** ")
-    print_logtime()
+    time_prefix()
     print(f"|| BALANCE ||:\t{actual.get('left')}: {bot_info.get(actual.get('left')):.9f}")
-    print_logtime()
+    time_prefix()
     print(f"|| BALANCE ||:\t{actual.get('right')}: {bot_info.get(actual.get('right')):.9f}")
     return bot_info
 
@@ -133,27 +135,27 @@ def is_protected(pr, side):
 
     v_risk = actual['risk']
 
-    print_logtime()
+    time_prefix()
     print(f"<< PRICE PROTECT >>")
-    print_logtime()
+    time_prefix()
     print(f"|| PP ||:\tRisk: {check:.2f}%")
-    print_logtime()
+    time_prefix()
     print(f"|| PP ||:\tOrder price: {pr}")
-    print_logtime()
+    time_prefix()
     print(f"|| PP ||:\tNow price: {t.get(side)}")
-    print_logtime()
+    time_prefix()
     print(f"|| PP ||:\tSide: {side}")
     if check == 0:
-        print_logtime()
+        time_prefix()
         print(f"|| PP ||:\tPrice is stable... Risk: 0% ")
         return {'working': True, "data": {'price': t.get(side), 'side': side}}
     # elif (-1 * v_risk) <= check < v_risk:
-    #     print_logtime()
+    #     time_prefix()
     #     print(f"|| PP ||:\tVolatility is low: {v_risk}% Mining: {True}")
     #     return {'working': True, "data": {'price': pr, 'side': side}}
     else:
         return
-    #     print_logtime()
+    #     time_prefix()
     #     print(f"|| WARN ||:\tVolatility is to high: {v_risk}% Mining: {False}")
     #     return {'working': False, "data": None}
 
@@ -165,7 +167,7 @@ def create_order(bot: Bitmax, pr, side, am):
     # elif price_cr.get('price') and price_cr.get('side') == 'sell':
     #     am = price_cr.get('price') * (1 - actual.get('mining_fee'))
     # else:
-    #     print_logtime()
+    #     time_prefix()
     #     print('|| ERROR ||: Calculate amount fail. Exit.')
     result = bot.create_order(
         order_type='limit',
@@ -174,11 +176,11 @@ def create_order(bot: Bitmax, pr, side, am):
         side=side,
         symbol=actual.get('pair')
     )
-    print_logtime()
+    time_prefix()
     print(f"{pr}")
-    print_logtime()
+    time_prefix()
     print(f"{am}")
-    print_logtime()
+    time_prefix()
     print(f"{side}")
 
     return result
@@ -186,14 +188,14 @@ def create_order(bot: Bitmax, pr, side, am):
 
 def is_filled(bot: Bitmax, tx):
     if tx is None:
-        print_logtime()
+        time_prefix()
         print('!!!!!!!!!! checking fail !!!!!!!!!!!!!')
     else:
         while True:
             if bot.is_filled(tx.get('coid')):
                 return True
             else:
-                print_logtime()
+                time_prefix()
                 print(f'\t{tx}')
                 continue
 
@@ -207,7 +209,7 @@ def base_to_queue(bal_dic: dict, price2updte):
 
 
 def save_to_log(starttime, response_data: dict, price: float, amount: float):
-    print_logtime()
+    time_prefix()
     log = dict(
         # user_id=b1.id,
         coid=response_data.get('coid'),
@@ -218,7 +220,7 @@ def save_to_log(starttime, response_data: dict, price: float, amount: float):
     )
     if not os.path.exists('log'):
         os.makedirs('log')
-    with open(f"log/{print_logtime(logging=True)[1:-1]}:00.log", 'a') as f:
+    with open(f"log/{time_prefix()[1:-1]}:00.log", 'a') as f:
         f.write(json.dumps(log) + '\n')
         f.close()
 
@@ -277,15 +279,17 @@ if __name__ == '__main__':
         sock.settimeout(10)
         sock.connect(('109.104.178.163', 2512))
         auth = f"auth_me:{b1.id}"
+
         sock.send(auth.encode('utf-8'))
         data = sock.recv(1024)
+        print(auth)
         sock.close()
         scheduler = BackgroundScheduler(daemon=True)
         scheduler.add_job(lambda: clear(b1, b2), 'interval', minutes=3)
         scheduler.start()
         # add scheduler send stat
         send_stat = BackgroundScheduler(daemon=True)
-        send_stat.add_job(lambda: send_trx(logfile=f"log/{print_logtime(logging=True)[1:-1]}:00.log"), trigger='interval', minutes=60)
+        send_stat.add_job(lambda: send_trx(logfile=f"log/{time_prefix()[1:-1]}:00.log"), trigger='interval', minutes=60)
         send_stat.start()
 
         if data and data.decode('utf-8') == 'True':
@@ -317,7 +321,7 @@ if __name__ == '__main__':
                         price = takt.get('sell') - actual.get('step')
 
                     else:
-                        print_logtime()
+                        time_prefix()
                         print("|| ERROR ||: Invalid transaction amount")
                         continue
 
