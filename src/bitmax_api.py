@@ -203,7 +203,8 @@ class Bitmax:
             coid=coid,
             params=params)
         r = resp.get('data')
-        print(r)
+        print(resp)
+        print(params)
         return r
 
     def get_fills_of_order(self, coid):

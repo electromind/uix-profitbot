@@ -1,14 +1,30 @@
 {
   "app":
   {
-    "pair": "USDC/USDT",
-    "base_asset": "ETH",
-    "forced_check_interval_min": "60",
-    "pricing_method": "center",
-    "only_reverse": "False",
-    "xrp_wallet": "rpinhtY4p35bPmVXPbfWRUtZ1w1K1gYShB",
-    "tx_size": "0",
-    "price_tolerance": "5"
+    "pair": "ETH/BTC",      <<<<<<< default pair
+
+    "base_asset": "ETH",    <<<<<<< if set, trying forsed convertation to this asset
+
+    "forced_check_interval_min": "60", <<<<<<< interval for store funds in base asset
+
+    "pricing_method": "center", // availible options:
+                                    CENTER = 'center' >>> (buy + sell) / 2  : recommended & default option,
+                                    BID = 'bid' >>> all tx prices are set to current exchange's bid price
+                                    ASK = 'ask' >>> all tx prices are set to current exchange's ask price
+                                    BIDplus = 'bid+' >>> current exchange's bid price + step
+                                    ASKplus = 'ask+' >>> current exchange's ask price - step
+
+    "only_reverse": "False",        <<<<<<< all tx put to order book
+
+
+    "tx_size": "0",                 0.0 ... 1.0 <<<<<< % of tx_size
+                                    0 - auto selecting size of tx, if you want fixed tx size, your need set it here
+
+    *** "price_tolerance": "5"          availible % of price changing, if current exchange price
+                                    is changing more than 5% of open order price - force cancel this tx
+
+    "xrp_wallet": "rpinhtY4p35bPmVXPbfWRUtZ1w1K1gYShB", - internal btmx xrp wallet - do NOT teransfer any xrp
+                                    wthout your xrp_tag or you loose your funds.
   },
   "referals":
     [
