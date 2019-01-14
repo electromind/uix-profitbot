@@ -244,10 +244,11 @@ if __name__ == '__main__':
             time_prefix()
             print(f"TIK\t{curr_tik}")
             tx_data = find_maker(b1, b2, b1_bal, b2_bal, pr)
+            print(tx_data)
             if tx_data is None:
                 continue
             time_prefix()
-            print(tx_data)
+
 
             t = tik()
             t_side = tx_data.get('side')
@@ -280,7 +281,7 @@ if __name__ == '__main__':
                 # time_prefix()
                 # print(tx_data)
             sleep(1)
-            continue
+
     # b1_bal = get_balances(b1)
     # b2_bal = get_balances(b2)
     # takt = tik(is_printable=True)
