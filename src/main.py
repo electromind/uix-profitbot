@@ -121,13 +121,14 @@ def create_order(bot: Bitmax, price: float, side: str, amount: float):
 
 def is_filled(bot: Bitmax, txid):
     if txid is None:
-        return None
+        return False
     else:
         while True:
             if bot.is_filled(txid.get('coid')):
                 return True
             else:
-                continue
+                return False
+
 
 
 def base_to_queue(bal_dic: dict, price2updte):
@@ -247,9 +248,6 @@ if __name__ == '__main__':
             print(tx_data)
             if tx_data is None:
                 continue
-            time_prefix()
-
-
             t = tik()
             t_side = tx_data.get('side')
             t_size = round(tx_data.get('amount') * 0.75, 6)
