@@ -44,7 +44,7 @@ def tradepair_setup(pair):
         tmp = Bitmax.pair_info(pair)
         actual['minTx'] = float(tmp.get('minQty'))
         actual['maxTx'] = float(tmp.get('maxQty'))
-        if tmp.get('miningStatus') == 'Mining,ReverseMining':
+        if tmp.get('miningStatus') == 'Mining,ReverseMining' or 'ReverseMining':
             actual['mining'] = True
             actual['reverse'] = True
         elif tmp.get('miningStatus') == 'Mining':
@@ -130,7 +130,6 @@ def is_filled(bot: Bitmax, txid):
                 return False
 
 
-
 def base_to_queue(bal_dic: dict, price2updte):
     for k, v in bal_dic.items():
         if str(k) == actual.get('right'):
@@ -188,16 +187,6 @@ def find_maker(b1: Bitmax, b2: Bitmax, bal1, bal2, price):
             return {'price': price, 'asset': actual.get('right'), 'amount': float(max_b1[0]), 'side': side, 'c_side': c_side, 'maker': b1.email}
     else:
         return None
-        # else:
-        #     if max_b1[0] == max_b2[0]:
-        #         if max_b1[1] == 'BTC':
-        #             b1.is_maker = True
-        #             b2.is_maker = False
-        #             return {'price': price, 'asset': 'BTC', 'amount': float(max_b2[0]), 'side': 'sell', 'c_side': 'buy'}
-        #         if max_b1[1] == 'ETH':
-        #             b1.is_maker = True
-        #             b2.is_maker = False
-        #             return {'price': price, 'asset': 'ETH', 'amount': float(max_b2[0]), 'side': 'sell', 'c_side': 'buy'}
 
 
 def send_trx(logfile="example.txt"):
@@ -223,11 +212,14 @@ def get_price(method=pricing_methods.CENTER):
     else:
         return round(((t_tik.get('buy') + t_tik.get('sell')) / 2.0), 8)
 
+
 if __name__ == '__main__':
     conf = read_config()
     app_setup(conf)
     tradepair_setup(pair=actual.get('pair'))
     print_current_settings()
+    if actual.get('reverse'):
+        res =
     b1 = Bitmax(conf.get('referals')[0], pair=actual.get('pair'))
     b2 = Bitmax(conf.get('referals')[1], pair=actual.get('pair'))
     if b1.auth() and b2.auth():
