@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
-import os
-from typing import Dict, Any, Union
 import sys
-from bot_utils import send_request, get_utc_timestamp, uuid32, get_logger, time_prefix
 from datetime import datetime
 from socket import socket
-from websocket import create_connection
-import multiprocessing
+from typing import Dict, Any, Union
 
+from src.bot_utils import send_request, get_utc_timestamp, uuid32, get_logger, time_prefix
+from src.constants import trade_interval
 
 testnet_url = 'https://bitmax-test.io/'
 mainnet_url = 'https://bitmax.io/'
@@ -144,10 +142,10 @@ class Bitmax:
     def get_tik(pair) -> dict:
         resp = send_request('GET', base_path=f'api/v1/quote?symbol={pair}', ts=get_utc_timestamp())
         tiker = dict(
-            buy_price=float(resp.get('askPrice')),
-            buy_size=float(resp.get('bidSize')),
-            sell_price=float(resp.get('bidPrice')),
-            sell_size=float(resp.get('askSize'))
+            sell=float(resp.get('askPrice')),
+            sell_size=float(resp.get('bidSize')),
+            buy=float(resp.get('bidPrice')),
+            buy_size=float(resp.get('askSize'))
         )
         return tiker
 
@@ -221,12 +219,23 @@ class Bitmax:
 
     def is_filled(self, coid):
         order = self.get_fills_of_order(coid=coid)
-        if order['data'] is None:
+        if not order['data']:
             return False
+        if float(order['data'][0]['q']) == float(order['data'][0]['f']) or order['data'][0]['status'] == 'Canceled':
+            return True
         if float(order['data'][0]['l']) < float(order['data'][0]['q']):
             return False
-        else:
+        if (get_utc_timestamp() - int(order['data'][0]['t'])) > int(trade_interval.ONE_MINUTE):
+            self.cancel_order_by_id(order['data'][0]['coid'])
             return True
+        if order['data'][0]['side'] == 'Sell':
+            if float(self.get_tik(self.pair).get('sell')) != float(order['data'][0]['p']):
+                self.cancel_order_by_id(order['data'][0]['coid'])
+
+        if order['data'][0]['side'] == 'Buy':
+            if float(self.get_tik(self.pair).get('buy')) != float(order['data'][0]['p']):
+                self.cancel_order_by_id(order['data'][0]['coid'])
+
 
     def cancel_order_by_id(self, orig_coid, pair):
         ts = get_utc_timestamp()

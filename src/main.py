@@ -1,14 +1,10 @@
 # -*- coding: utf-8 -*-
-from datetime import datetime
-import random
 import sys
-from bitmax_api import Bitmax
-from bot_utils import read_config, get_logger, time_prefix
-from client import send_data, clear_log, create_list
-from constants import pricing_methods
-from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime
 from time import sleep
 
+from src.bitmax_api import Bitmax
+from src.bot_utils import get_logger, time_prefix
 
 actual = dict()
 takt = {}
@@ -30,7 +26,7 @@ def app_setup(config: dict):
         fees = Bitmax.get_current_fees()
         actual['rev_fee'] = float(fees.get('maker').get('rebate'))
         actual['mining_fee'] = float(fees.get('taker').get('mining'))
-        actual['tx_size'] = (app_config.get('tx_size') if float(app_config.get('tx_size')) > 0 else 1.0)
+        actual['tx_size'] = (float(app_config.get('tx_size')) if float(app_config.get('tx_size')) > 0 else 1.0)
     except KeyError as e:
         print(f"Invalid key. Check config file: {e}")
         sys.exit(1)
@@ -63,13 +59,21 @@ def print_current_settings():
 
 def tik():
     actual_tik = Bitmax.get_tik(actual.get('pair'))
-    takt['sell'] = actual_tik.get('buy_price')
-    takt['buy'] = actual_tik.get('sell_price')
-    takt['buy_size'] = actual_tik.get('sell_size')
-    takt['sell_size'] = actual_tik.get('buy_size')
+    takt['sell'] = actual_tik.get('sell')
+    takt['buy'] = actual_tik.get('buy')
+    takt['buy_size'] = actual_tik.get('buy_size')
+    takt['sell_size'] = actual_tik.get('sell_size')
     takt['delta'] = int((takt['sell'] - takt['buy']) / actual.get('step'))
+    takt['middle'] = round((actual_tik.get('buy') + actual_tik.get('sell')) / 2.0, 8)
     return takt
 
+
+def is_safe_price(price: float, side):
+    curr_p = tik()
+    if curr_p.get(side) == price:
+        return True
+    else:
+        return False
 
 def get_balances(bot: Bitmax, pair=None):
     b = bot.get_balances()
@@ -124,10 +128,13 @@ def is_filled(bot: Bitmax, txid):
         return False
     else:
         while True:
-            if bot.is_filled(txid.get('coid')):
+            if bot.is_filled(txid):
                 return True
             else:
-                return False
+                time_prefix()
+                print(f"in is_filled >>>>> {bot.is_filled(txid)}")
+                sleep(1)
+                continue
 
 
 def base_to_queue(bal_dic: dict, price2updte):
@@ -166,27 +173,89 @@ def clear(b1: Bitmax, b2: Bitmax):
 
 
 def find_maker(b1: Bitmax, b2: Bitmax, bal1, bal2, price):
-    conv_b1 = base_to_queue(bal1, price2updte=price)
-    conv_b2 = base_to_queue(bal2, price2updte=price)
-    max_b1 = max(zip(conv_b1.values(), conv_b1.keys()))
-    max_b2 = max(zip(conv_b2.values(), conv_b2.keys()))
-    if min(max_b1[0], max_b2[0]) > actual.get('minTx'):
+    pass
 
+'''
+    max_b1 = max(zip(bal1.values(), bal1.keys()))
+    max_b2 = max(zip(bal2.values(), bal2.keys()))
+    time_prefix()
+    print(max_b1)
+    time_prefix()
+    print(max_b2)
+    tx_data = dict()
+    if max_b1[1] == max_b2[1] == actual.get('right'):
         if max_b1[0] >= max_b2[0]:
-            b1.is_maker = False
-            b2.is_maker = True
-            side = 'buy' if max_b2[1] == actual.get('right') else 'sell'
-            c_side = 'sell' if side == 'buy' else 'buy'
-            return {'price': price, 'asset': 'BTC', 'amount': float(max_b2[0] * actual.get('tx_size')), 'side': side, 'c_side': c_side, 'maker': b2.email}
-
+            if (max_b1[0] / max_b2[1]) * 100 > 1.25:
+                tmp = max_b1[0] - max_b2[1]
+                create_order(max_b1, 0.5, 'sell', 0.9)
         else:
-            b1.is_maker = True
-            b2.is_maker = False
-            side = ('buy' if max_b1[1] == actual.get('right') else 'sell')
-            c_side = ('sell' if side == 'buy' else 'buy')
-            return {'price': price, 'asset': actual.get('right'), 'amount': float(max_b1[0]), 'side': side, 'c_side': c_side, 'maker': b1.email}
-    else:
-        return None
+            pass
+            tx_data['maker'] = b2
+            tx_data['taker'] = None
+            tx_data['bal'] = bal2.get(actual.get('right'))
+            tx_data['maker_side'] = 'buy'
+            tx_data['type'] = 'single'
+        else:
+            tx_data['maker'] = b1
+            tx_data['taker'] = None
+            tx_data['bal'] = bal1.get(actual.get('right'))
+            tx_data['maker_side'] = 'buy'
+            tx_data['type'] = 'single'
+    if max_b1[1] == max_b2[1] == actual.get('left'):
+        if max_b1[0] >= max_b2[0]:
+            tx_data['maker'] = b2
+            tx_data['taker'] = b1
+            tx_data['bal'] = bal2.get(actual.get('left'))
+            tx_data['maker_side'] = 'sell'
+            tx_data['type'] = 'single'
+        else:
+            tx_data['maker'] = b1
+            tx_data['taker'] = b2
+            tx_data['bal'] = bal1.get(actual.get('left'))
+            tx_data['maker_side'] = 'sell'
+            tx_data['type'] = 'single'
+    if max_b2[1] != max_b1[1] == actual.get('right'):
+        if max_b1[0] >= max_b2[0]:
+            tx_data['maker'] = b2
+            tx_data['taker'] = b1
+            tx_data['bal'] = bal2.get(actual.get('left'))
+            tx_data['maker_side'] = 'sell'
+            tx_data['type'] = 'double'
+        else:
+            tx_data['maker'] = b1
+            tx_data['taker'] = b2
+            tx_data['bal'] = bal1.get(actual.get('left'))
+            tx_data['maker_side'] = 'sell'
+            tx_data['type'] = 'double'
+        if max_b1[0] < max_b2[0]:
+            if max_b1[1] == actual.get('left'):
+                tx_data['maker'] = b1
+                tx_data['taker'] = b2
+                tx_data['bal'] = bal1.get(actual.get('left'))
+                tx_data['maker_side'] = 'sell'
+                tx_data['type'] = 'double'
+            else:
+                tx_data['maker'] = b2
+                tx_data['taker'] = b1
+                tx_data['bal'] = bal2.get(actual.get('left'))
+                tx_data['maker_side'] = 'sell'
+                tx_data['type'] = 'double'
+
+    time_prefix()
+    print(tx_data)
+    return tx_data
+
+
+def pair_tx(maker: Bitmax, taker: Bitmax, bal: float, type: str, side: str):
+    pr = tik().get(side)
+
+    if type == 'single':
+        tx = create_order(bot=maker, price=pr, side=side, amount=bal)
+        return tx
+    elif type == 'double':
+        maker_txid = create_order(bot=maker, price=pr, side=side, amount=bal * 0.99)
+        taker_txid = create_order(bot=taker, price=pr, side=tx_cross_side(side), amount=bal / (1 + actual.get('step') + actual.get('mining_fee')))
+        return [maker_txid, taker_txid]
 
 
 def send_trx(logfile="example.txt"):
@@ -199,18 +268,18 @@ def send_trx(logfile="example.txt"):
         print("No send")
 
 
-def get_price(method=pricing_methods.CENTER):
-    t_tik = tik()
-    if method == pricing_methods.ASK:
-        return t_tik.get('sell')
-    elif method == pricing_methods.BID:
-        return t_tik.get('buy')
-    elif method == pricing_methods.ASKplus:
-        return t_tik.get('sell') - actual.get('step')
-    elif method == pricing_methods.BIDplus:
-        return t_tik.get('buy') + actual.get('step')
-    else:
-        return round(((t_tik.get('buy') + t_tik.get('sell')) / 2.0), 8)
+# def get_price(method=pricing_methods.CENTER):
+#     t_tik = tik()
+#     if method == pricing_methods.ASK:
+#         return t_tik.get('sell')
+#     elif method == pricing_methods.BID:
+#         return t_tik.get('buy')
+#     elif method == pricing_methods.ASKplus:
+#         return t_tik.get('sell') - actual.get('step')
+#     elif method == pricing_methods.BIDplus:
+#         return t_tik.get('buy') + actual.get('step')
+#     else:
+#         return round(((t_tik.get('buy') + t_tik.get('sell')) / 2.0), 8)
 
 
 if __name__ == '__main__':
@@ -218,8 +287,6 @@ if __name__ == '__main__':
     app_setup(conf)
     tradepair_setup(pair=actual.get('pair'))
     print_current_settings()
-    if actual.get('reverse'):
-        res =
     b1 = Bitmax(conf.get('referals')[0], pair=actual.get('pair'))
     b2 = Bitmax(conf.get('referals')[1], pair=actual.get('pair'))
     if b1.auth() and b2.auth():
@@ -233,119 +300,38 @@ if __name__ == '__main__':
             time_prefix()
             print(f"{b2_bal} - {b2.email}")
             curr_tik = tik()
-            pr = get_price()
+            pr = curr_tik.get('middle')
             time_prefix()
             print(f"TIK\t{curr_tik}")
             tx_data = find_maker(b1, b2, b1_bal, b2_bal, pr)
-            print(tx_data)
-            if tx_data is None:
+            time_prefix()
+            print(f"TX_DATA:\t{tx_data}")
+            if tx_data is None or not tx_data:
                 continue
-            t = tik()
-            t_side = tx_data.get('side')
-            t_size = round(tx_data.get('amount') * 0.75, 6)
-            #if b1.is_maker and ((t_size / tx_data.get('amount')) * 100) < 10.0:
-            if b1.is_maker:
-                tx_coid_maker = create_order(bot=b1, price=pr, side=tx_data.get('side'), amount=t_size)
-                print(f"create_maker(bot={b1.email}, price={pr}, side={tx_data.get('side')}, amount={t_size}")
-                tx_coid_taker = create_order(bot=b2, price=pr, side=tx_data.get('c_side'), amount=t_size)
-                print(f"create_taker(bot={b2.email}, price={pr}, side={tx_data.get('c_side')}, amount={t_size}")
-                if is_filled(bot=b2, txid=tx_coid_taker):
-                    continue
-                elif is_filled(bot=b1, txid=tx_coid_maker):
-                    continue
+            else:
+                if tx_data.get('type') == 'single':
+                    txid = pair_tx(maker=tx_data.get('maker'), taker=tx_data.get('taker'), side=tx_data.get('maker_side'), bal=tx_data.get('bal'), type=tx_data.get('type'))
+                    try:
+                        if is_filled(bot=tx_data.get('maker'), txid=txid.get('coid')):
+                            continue
+                    except AttributeError as err:
+                        time_prefix()
+                        print(err)
+                    except TypeError as err:
+                        time_prefix()
+                        print(err)
 
-            #elif b2.is_maker and ((t_size / tx_data.get('amount')) * 100) < 10.0:
-            elif b2.is_maker:
-                tx_coid_maker = create_order(bot=b2, price=pr, side=tx_data.get('side'), amount=t_size)
-                print(f"create_maker(bot={b2.email}, price={pr}, side={tx_data.get('side')}, amount={t_size}")
-                tx_coid_taker = create_order(bot=b1, price=pr, side=tx_data.get('c_side'), amount=t_size)
-                print(f"create_taker(bot={b1.email}, price={pr}, side={tx_data.get('c_side')}, amount={t_size}")
-                if is_filled(bot=b1, txid=tx_coid_taker):
-                    continue
-                elif is_filled(bot=b2, txid=tx_coid_maker):
-                    continue
-
-                # print((t_size / tx_data.get('amount')) * 100)
-                # time_prefix()
-                # print(t)
-                # time_prefix()
-                # print(tx_data)
-            sleep(1)
-
-    # b1_bal = get_balances(b1)
-    # b2_bal = get_balances(b2)
-    # takt = tik(is_printable=True)
-    # print(takt)
-    #
-    #     if data and data.decode('utf-8') == 'True':
-    #         first_tik = tik()
-    #         if isinstance(b1, Bitmax):
-    #             b1.lastBuyPrice = first_tik.get('buy')
-    #             b1.lastSellPrice = first_tik.get('sell')
-    #         if isinstance(b2, Bitmax):
-    #             b2.lastBuyPrice = first_tik.get('buy')
-    #             b2.lastSellPrice = first_tik.get('sell')
-    #         print('\tSTART REVERSE MINING\t'.join(['*' * 40, '*' * 40]))
-    #
-    #         while True:
-    #             global price
-    #             b1_bal = get_balances(b1)
-    #             b2_bal = get_balances(b2)
-    #             takt = tik(is_printable=True)
-    #             if takt.get('delta') > 20:
-    #                 # miner tactics
-    #                 if actual.get('price_tactic') == 'center':
-    #                     price = (takt.get('buy') + takt.get('sell')) / 2.0
-    #                     # price = takt.get('buy')
-    #                     # price = takt.get('sell')
-    #
-    #                 elif actual.get('price_tactic') == 'bid_plus_one':
-    #                     price = takt.get('buy') + actual.get('step')
-    #
-    #                 elif actual.get('price_tactic') == 'ask_minus_one':
-    #                     price = takt.get('sell') - actual.get('step')
-    #
-    #                 else:
-    #                     print_logtime()
-    #                     print("|| ERROR ||: Invalid transaction amount")
-    #                     continue
-    #
-    #                 data = find_maker(b1, b2, bal1=b1_bal, bal2=b2_bal, price=price)
-    #                 # if b1.is_maker:
-    #                 #     m = b1
-    #                 #     t = b2
-    #                 # else:
-    #                 #     m = b2
-    #                 #     t = b1
-    #
-    #                 choice = random.randint(1, 100) % 2
-    #                 if choice == 0:
-    #                     m = b1
-    #                     t = b2
-    #                 else:
-    #                     m = b2
-    #                     t = b1
-    #                 amnt = round(data.get('amount') * 0.5, 6)
-    #                 if amnt < actual['minTx']:
-    #                     continue
-    #                 maker = create_order(bot=m, pr=price, side=data.get('side'), am=amnt)
-    #                 # time.sleep(1)
-    #
-    #                 taker = create_order(bot=t, pr=price, side=data.get('c_side'), am=amnt)
-    #                 save_to_log(
-    #                     starttime=time.time(),
-    #                     response_data=taker if taker else {'coid': None, 'status': 'Fail'},
-    #                     price=takt.get(data.get('side')),
-    #                     amount=amnt
-    #                 )
-    #                 save_to_log(
-    #                     starttime=time.time(),
-    #                     response_data=maker if maker else {'coid': None, 'status': 'Fail'},
-    #                     price=price,
-    #                     amount=amnt
-    #                 )
-    #
-    #     else:
-    #         print(f"Invalid key from authorization {b1.id}. Please check your config.json")
-    # except ConnectionError as e:
-    #     print(f"Error to authorization: {e}")
+                elif tx_data.get('type') == 'double':
+                    txid = pair_tx(maker=tx_data.get('maker'), taker=tx_data.get('taker'), side=tx_data.get('maker_side'), bal=tx_data.get('bal'), type=tx_data.get('type'))
+                    try:
+                        if is_filled(bot=tx_data.get('taker'), txid=txid[1].get('coid')):
+                            continue
+                        if is_filled(bot=tx_data.get('maker'), txid=txid[0].get('coid')):
+                            continue
+                    except AttributeError as err:
+                        time_prefix()
+                        print(err)
+                    except TypeError as err:
+                        time_prefix()
+                        print(err)
+'''

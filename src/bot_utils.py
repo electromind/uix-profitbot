@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
-import requests
-import json
-import hmac
 import base64
 import hashlib
+import hmac
+import json
+import logging
 import random
 import string
 from datetime import datetime
-import logging
+
+import requests
 
 
 def time_prefix():
@@ -27,7 +28,7 @@ def get_utc_timestamp() -> int:
 
 def get_timestamp() -> str:
     ts = datetime.now()
-    return ts.strftime("%d-%m-%Y--%H-%M-00")
+    return ts.strftime("%d-%m-%Y %H:%M:00")
 
 
 def make_auth_header(timestamp, api_path, api_key, secret, coid=None):
@@ -89,6 +90,7 @@ def get_logger(logger_name: str):
         format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
         datefmt='%m-%d %H:%M',
         filename=f'log/main.log')
+
     file_handler = logging.FileHandler(''.join(['log/', logger_name, '.log']))
     file_handler.setLevel(logging.DEBUG)
     stream_handler = logging.StreamHandler()
