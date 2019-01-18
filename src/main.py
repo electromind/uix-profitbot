@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
+import random
 import sys
 from datetime import datetime
 from time import sleep
 
 from src.bitmax_api import Bitmax
-from src.bot_utils import get_logger, time_prefix
+from src.bot_utils import get_logger, time_prefix, read_config, tx_cross_side, create_list, clear_log, send_stat
+from src.constants import pricing_methods
 
 actual = dict()
 takt = {}
-logger = get_logger("MAIN")
+logger = get_logger("MAIN >>>")
 
 
 def app_setup(config: dict):
@@ -75,7 +77,8 @@ def is_safe_price(price: float, side):
     else:
         return False
 
-def get_balances(bot: Bitmax, pair=None):
+
+def get_bot_balance(bot: Bitmax, pair=None):
     b = bot.get_balances()
     if pair is None:
         return b
@@ -91,24 +94,6 @@ def get_balances(bot: Bitmax, pair=None):
                 else:
                     continue
         return resp
-
-# def is_protected(pr, side):
-#     t = tik(is_printable=True)
-#     if side == 'buy':
-#         check = ((pr - t.get(side)) / t.get(side)) * 100
-#     else:
-#         check = ((t.get(side) - pr) / t.get(side)) * 100
-#     if check == 0:
-#         return {'working': True, "data": {'price': t.get(side), 'side': side}}
-#     # elif (-1 * v_risk) <= check < v_risk:
-#     #     print_logtime()
-#     #     print(f"|| PP ||:\tVolatility is low: {v_risk}% Mining: {True}")
-#     #     return {'working': True, "data": {'price': pr, 'side': side}}
-#     else:
-#         return {'working': False, "data": None}
-#     #     print_logtime()
-#     #     print(f"|| WARN ||:\tVolatility is to high: {v_risk}% Mining: {False}")
-#
 
 
 def create_order(bot: Bitmax, price: float, side: str, amount: float):
@@ -173,9 +158,8 @@ def clear(b1: Bitmax, b2: Bitmax):
 
 
 def find_maker(b1: Bitmax, b2: Bitmax, bal1, bal2, price):
-    pass
 
-'''
+    '''
     max_b1 = max(zip(bal1.values(), bal1.keys()))
     max_b2 = max(zip(bal2.values(), bal2.keys()))
     time_prefix()
@@ -244,6 +228,7 @@ def find_maker(b1: Bitmax, b2: Bitmax, bal1, bal2, price):
     time_prefix()
     print(tx_data)
     return tx_data
+'''
 
 
 def pair_tx(maker: Bitmax, taker: Bitmax, bal: float, type: str, side: str):
@@ -258,31 +243,33 @@ def pair_tx(maker: Bitmax, taker: Bitmax, bal: float, type: str, side: str):
         return [maker_txid, taker_txid]
 
 
-def send_trx(logfile="example.txt"):
-    tx_list = create_list(stat_object=logfile)
-    data = '{"user_id": "' + b1.id + '", "tx_list": [' + ','.join(tx_list) + ']}'
-    if send_data(data=data):
+def send_trx(bot: Bitmax, logfile="hourly_stat.log"):
+    tx_list = create_list()
+    data = '{"user_id": "' + bot.id + '", "tx_list": [' + ','.join(tx_list) + ']}'
+    if send_stat(stat_data=data):
         clear_log(logfile)
-        print("Statistics send successfully")
+        time_prefix()
+        print("Stat was successfully sended")
     else:
-        print("No send")
+        time_prefix()
+        print("Sending statistc error")
 
 
-# def get_price(method=pricing_methods.CENTER):
-#     t_tik = tik()
-#     if method == pricing_methods.ASK:
-#         return t_tik.get('sell')
-#     elif method == pricing_methods.BID:
-#         return t_tik.get('buy')
-#     elif method == pricing_methods.ASKplus:
-#         return t_tik.get('sell') - actual.get('step')
-#     elif method == pricing_methods.BIDplus:
-#         return t_tik.get('buy') + actual.get('step')
-#     else:
-#         return round(((t_tik.get('buy') + t_tik.get('sell')) / 2.0), 8)
+def get_price(method=pricing_methods.CENTER):
+    t_tik = tik()
+    if method == pricing_methods.ASK:
+        return t_tik.get('sell')
+    elif method == pricing_methods.BID:
+        return t_tik.get('buy')
+    elif method == pricing_methods.ASKplus:
+        return t_tik.get('sell') - actual.get('step')
+    elif method == pricing_methods.BIDplus:
+        return t_tik.get('buy') + actual.get('step')
+    else:
+        return round(((t_tik.get('buy') + t_tik.get('sell')) / 2.0), 8)
 
 
-if __name__ == '__main__':
+def auth_start():
     conf = read_config()
     app_setup(conf)
     tradepair_setup(pair=actual.get('pair'))
@@ -291,47 +278,75 @@ if __name__ == '__main__':
     b2 = Bitmax(conf.get('referals')[1], pair=actual.get('pair'))
     if b1.auth() and b2.auth():
         clear(b1, b2)
-        while True:
-            #clear(b1, b2)
-            b1_bal = get_balances(b1, actual.get('pair'))
-            b2_bal = get_balances(b2, actual.get('pair'))
-            time_prefix()
-            print(f"{b1_bal} - {b1.email}")
-            time_prefix()
-            print(f"{b2_bal} - {b2.email}")
-            curr_tik = tik()
-            pr = curr_tik.get('middle')
-            time_prefix()
-            print(f"TIK\t{curr_tik}")
-            tx_data = find_maker(b1, b2, b1_bal, b2_bal, pr)
-            time_prefix()
-            print(f"TX_DATA:\t{tx_data}")
-            if tx_data is None or not tx_data:
-                continue
-            else:
-                if tx_data.get('type') == 'single':
-                    txid = pair_tx(maker=tx_data.get('maker'), taker=tx_data.get('taker'), side=tx_data.get('maker_side'), bal=tx_data.get('bal'), type=tx_data.get('type'))
-                    try:
-                        if is_filled(bot=tx_data.get('maker'), txid=txid.get('coid')):
-                            continue
-                    except AttributeError as err:
-                        time_prefix()
-                        print(err)
-                    except TypeError as err:
-                        time_prefix()
-                        print(err)
+        return b1, b2
+    else:
+        return False
 
-                elif tx_data.get('type') == 'double':
-                    txid = pair_tx(maker=tx_data.get('maker'), taker=tx_data.get('taker'), side=tx_data.get('maker_side'), bal=tx_data.get('bal'), type=tx_data.get('type'))
-                    try:
-                        if is_filled(bot=tx_data.get('taker'), txid=txid[1].get('coid')):
-                            continue
-                        if is_filled(bot=tx_data.get('maker'), txid=txid[0].get('coid')):
-                            continue
-                    except AttributeError as err:
-                        time_prefix()
-                        print(err)
-                    except TypeError as err:
-                        time_prefix()
-                        print(err)
-'''
+
+def get_balance_list(b1: Bitmax, b2: Bitmax):
+    balance_b1 = get_bot_balance(bot=b1, pair=actual.get('pair'))
+    balance_b2 = get_bot_balance(bot=b2, pair=actual.get('pair'))
+    return [balance_b1, balance_b2]
+
+
+def dep_equalizer(pair_balance: dict, owner: Bitmax):
+    left_depo = pair_balance.get(actual.get('left'))
+    right_depo = pair_balance.get(actual.get('right'))
+    delta = round(left_depo - right_depo, 6)
+
+    if delta >= 0:
+        price = tik().get('sell')
+        if delta > actual.get('minTx'):
+            tmp_tx_sell = create_order(owner, price=price, amount=delta / 2.0, side='sell')
+            return tmp_tx_sell
+        else:
+            return None
+
+    elif delta < 0:
+        delta = delta * -1
+        price = tik().get('buy')
+        if delta > actual.get('minTx'):
+            tmp_tx_sell = create_order(owner, price=price, amount=delta / 2.0 / price, side='buy')
+            return tmp_tx_sell
+        else:
+            return None
+    else:
+        return pair_balance
+
+
+def equalize_funds(funds: list, bot1, bot2):
+    res1 = dep_equalizer(funds[0], bot1)
+    res2 = dep_equalizer(funds[1], bot2)
+    return [res1, res2]
+
+
+def mine(bot1: Bitmax, bot2: Bitmax, bot_funds: list):
+    r_side = random.choice(['sell', 'buy'])
+    unit = 'left' if r_side == 'sell' else 'right'
+    c_unit = 'left' if unit == 'right' else 'right'
+    rand = random.choice([0, 1])
+    if rand == 0:
+        maker = [bot1, bot_funds[0]]
+        taker = [bot2, bot_funds[1]]
+    else:
+        maker = [bot2, bot_funds[1]]
+        taker = [bot1, bot_funds[0]]
+
+    price = tik().get('middle')
+    rev_tx = create_order(bot=maker[0], price=price, amount=maker[1].get(actual.get(unit)) * 0.9, side=r_side)
+    mine_tx = create_order(bot=taker[0], price=price, amount=taker[1].get(actual.get(c_unit)) * 0.9, side=tx_cross_side(r_side))
+    time_prefix()
+    print(rev_tx)
+    time_prefix()
+    print(mine_tx)
+
+if __name__ == '__main__':
+    bot_one, bot_two = auth_start()
+
+    # print(bot_funds)
+    while True:
+        bot_funds = get_balance_list(b1=bot_one, b2=bot_two)
+        prepared1, prepared2 = equalize_funds(bot_funds, bot_one, bot_two)
+
+        mine(bot1=bot_one, bot2=bot_two, bot_funds=bot_funds)
+
