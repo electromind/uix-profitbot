@@ -4,6 +4,8 @@ import sys
 from datetime import datetime
 from time import sleep
 
+from apscheduler.schedulers.background import BackgroundScheduler
+
 from src.bitmax_api import Bitmax
 from src.bot_utils import get_logger, time_prefix, read_config, tx_cross_side, create_list, clear_log, send_stat
 from src.constants import pricing_methods
@@ -276,6 +278,9 @@ def auth_start():
     print_current_settings()
     b1 = Bitmax(conf.get('referals')[0], pair=actual.get('pair'))
     b2 = Bitmax(conf.get('referals')[1], pair=actual.get('pair'))
+    scheduler = BackgroundScheduler(daemon=True)
+    scheduler.add_job(lambda: clear(b1, b2), 'interval', minutes=5)
+    scheduler.start()
     if b1.auth() and b2.auth():
         clear(b1, b2)
         return b1, b2
@@ -298,6 +303,7 @@ def dep_equalizer(pair_balance: dict, owner: Bitmax):
         price = tik().get('sell')
         if delta > actual.get('minTx'):
             tmp_tx_sell = create_order(owner, price=price, amount=delta / 2.0, side='sell')
+            #tmp_tx_buy = create_order(owner, price=price, amount=delta / 2.0 * 0.9, side='buy')
             return tmp_tx_sell
         else:
             return None
@@ -321,24 +327,26 @@ def equalize_funds(funds: list, bot1, bot2):
 
 
 def mine(bot1: Bitmax, bot2: Bitmax, bot_funds: list):
+
     r_side = random.choice(['sell', 'buy'])
     unit = 'left' if r_side == 'sell' else 'right'
     c_unit = 'left' if unit == 'right' else 'right'
-    rand = random.choice([0, 1])
+    rand = random.randint(1, 100) % 2
     if rand == 0:
         maker = [bot1, bot_funds[0]]
         taker = [bot2, bot_funds[1]]
-    else:
+    elif rand == 1:
         maker = [bot2, bot_funds[1]]
         taker = [bot1, bot_funds[0]]
 
     price = tik().get('middle')
-    rev_tx = create_order(bot=maker[0], price=price, amount=maker[1].get(actual.get(unit)) * 0.9, side=r_side)
-    mine_tx = create_order(bot=taker[0], price=price, amount=taker[1].get(actual.get(c_unit)) * 0.9, side=tx_cross_side(r_side))
+    rev_tx = create_order(bot=maker[0], price=price, amount=maker[1].get(actual.get(unit)) * 0.9, side='buy')
+    mine_tx = create_order(bot=taker[0], price=price, amount=taker[1].get(actual.get(c_unit)) * 0.9, side='sell')
     time_prefix()
     print(rev_tx)
     time_prefix()
     print(mine_tx)
+
 
 if __name__ == '__main__':
     bot_one, bot_two = auth_start()
@@ -347,6 +355,5 @@ if __name__ == '__main__':
     while True:
         bot_funds = get_balance_list(b1=bot_one, b2=bot_two)
         prepared1, prepared2 = equalize_funds(bot_funds, bot_one, bot_two)
-
         mine(bot1=bot_one, bot2=bot_two, bot_funds=bot_funds)
-
+        #sleep(1)
