@@ -12,8 +12,10 @@ from src.constants import pricing_methods
 
 actual = dict()
 takt = {}
-logger = get_logger("MAIN >>>")
-
+logger = get_logger(''.join(['main', time_prefix()]))
+last_price_buy = 0
+last_price_sell = 0
+last_price_middle = 0
 
 def app_setup(config: dict):
     app_conf = config
@@ -68,7 +70,7 @@ def tik():
     takt['buy_size'] = actual_tik.get('buy_size')
     takt['sell_size'] = actual_tik.get('sell_size')
     takt['delta'] = int((takt['sell'] - takt['buy']) / actual.get('step'))
-    takt['middle'] = round((actual_tik.get('buy') + actual_tik.get('sell')) / 2.0, 8)
+    takt['middle'] = round((actual_tik.get('buy') + actual_tik.get('sell')) / 2.0, 6)
     return takt
 
 
@@ -327,25 +329,63 @@ def equalize_funds(funds: list, bot1, bot2):
 
 
 def mine(bot1: Bitmax, bot2: Bitmax, bot_funds: list):
-
-    r_side = random.choice(['sell', 'buy'])
-    unit = 'left' if r_side == 'sell' else 'right'
-    c_unit = 'left' if unit == 'right' else 'right'
+    maker = None
+    taker = None
+    global last_price_middle
+    # r_side = random.choice(['sell', 'buy'])
+    # unit = 'left' if r_side == 'sell' else 'right'
+    # c_unit = 'left' if unit == 'right' else 'right'
+    r_side = 'buy'
+    unit = 'right'
+    c_unit = 'left'
     rand = random.randint(1, 100) % 2
     if rand == 0:
         maker = [bot1, bot_funds[0]]
         taker = [bot2, bot_funds[1]]
-    elif rand == 1:
+    else:
         maker = [bot2, bot_funds[1]]
         taker = [bot1, bot_funds[0]]
+    tik_now = tik()
+    price = tik_now.get('middle')
+    am_maker_base = ((taker[1].get(actual.get(unit))) * price)
+    am_maker = round(am_maker_base - (am_maker_base * actual.get('mining_fee')), 6) * 0.5
+    # am_taker = taker[1].get(actual.get(c_unit)) * actual.get('mining_fee')
+    am_taker = am_maker
+    if price != last_price_middle:
+        last_price_middle = price
+    if tik_now.get('delta') <= 3:
+        rev_tx = create_order(bot=maker[0], price=price, amount=am_maker, side=r_side)
+        mine_tx = create_order(bot=taker[0], price=price, amount=am_taker, side=tx_cross_side(r_side))
+        time_prefix()
+        print(rev_tx)
+        logger.info(rev_tx)
+        time_prefix()
+        print(mine_tx)
+        logger.info(mine_tx)
+    else:
+        time_prefix()
+        print(f"Delta: {tik_now.get('delta')} - too risky, waiting...")
 
-    price = tik().get('middle')
-    rev_tx = create_order(bot=maker[0], price=price, amount=maker[1].get(actual.get(unit)) * 0.9, side='buy')
-    mine_tx = create_order(bot=taker[0], price=price, amount=taker[1].get(actual.get(c_unit)) * 0.9, side='sell')
-    time_prefix()
-    print(rev_tx)
-    time_prefix()
-    print(mine_tx)
+
+def order_checker(order_list: dict, owner: Bitmax):
+    for order in order_list:
+        now = tik()
+        # price_ratio = now.get('middle') / (float(order.get('orderPrice'))) * 100
+        #if -1 * actual.get('risk') < price_ratio < actual.get('risk'):
+        price_ratio = int((now.get('middle') - float(order.get('orderPrice'))) / (actual.get('step') / 10))
+        time_prefix()
+        print(f'Ratio: {price_ratio}')
+
+        if -2 < price_ratio < 2:
+            pass
+        else:
+            owner.cancel_order_by_id(order.get('coid'))
+
+def check_my_orders(b1: Bitmax, b2: Bitmax):
+    ol_1 = b1.get_open_orders().get('data')
+    ol_2 = b2.get_open_orders().get('data')
+    order_checker(ol_1, b1)
+    order_checker(ol_2, b2)
 
 
 if __name__ == '__main__':
@@ -356,4 +396,5 @@ if __name__ == '__main__':
         bot_funds = get_balance_list(b1=bot_one, b2=bot_two)
         prepared1, prepared2 = equalize_funds(bot_funds, bot_one, bot_two)
         mine(bot1=bot_one, bot2=bot_two, bot_funds=bot_funds)
+        check_my_orders(bot_one, bot_two)
         #sleep(1)

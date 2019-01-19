@@ -5,7 +5,6 @@ from socket import socket
 from typing import Dict, Any, Union
 
 from src.bot_utils import send_request, get_utc_timestamp, uuid32, get_logger, time_prefix
-from src.constants import trade_interval
 
 testnet_url = 'https://bitmax-test.io/'
 mainnet_url = 'https://bitmax.io/'
@@ -185,7 +184,7 @@ class Bitmax:
             coid=coid,
             time=ts,
             symbol=symbol,
-            orderPrice=str(price),
+            orderPrice=str(round(price, 6)),
             orderQty=str(round(quantity, 6)),
             orderType=order_type,
             side=side
@@ -200,9 +199,12 @@ class Bitmax:
             ts=ts,
             coid=coid,
             params=params)
-        r = resp.get('data')
+        if resp.get('data') is None:
+            r = resp.get('message')
+        else:
+            r = resp.get('data')
         time_prefix()
-        print(f"{self.email}\t{params}")
+        print(f"{self.email[:5]}\tprice: {params['orderPrice']}\tamount: {params['orderQty']}\tside: {params['side']}")
         return r
 
     def get_fills_of_order(self, coid):
@@ -216,7 +218,7 @@ class Bitmax:
             api_sec=self.secret,
             ts=ts)
         return res
-
+    '''
     def is_filled(self, coid):
         order = self.get_fills_of_order(coid=coid)
         if not order['data']:
@@ -235,15 +237,14 @@ class Bitmax:
         if order['data'][0]['side'] == 'Buy':
             if float(self.get_tik(self.pair).get('buy')) != float(order['data'][0]['p']):
                 self.cancel_order_by_id(order['data'][0]['coid'])
-
-
-    def cancel_order_by_id(self, orig_coid, pair):
+    '''
+    def cancel_order_by_id(self, orig_coid):
         ts = get_utc_timestamp()
         coid = uuid32()
         params = {
             'coid': coid,
             'time': ts,
-            'symbol': pair.replace("-", "/"),
+            'symbol': self.pair.replace("-", "/"),
             'origCoid': orig_coid
         }
         resp = send_request(
@@ -334,6 +335,19 @@ class Bitmax:
             ts=ts,
             params=params)
         return resp['data']
+
+    def get_open_orders(self):
+        ts = get_utc_timestamp()
+        resp = send_request(
+            is_signed=True,
+            method='GET',
+            base_path=f'{self.account_group}/api/v1/order/open',
+            api_path='order/open',
+            api_key=self.api_key,
+            api_sec=self.secret,
+            ts=ts
+        )
+        return resp
 
 
 class WSBitmax(Bitmax):

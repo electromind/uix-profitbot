@@ -54,8 +54,9 @@ def clear_log(filename=logfile_name):
 
 def time_prefix():
     current_time = datetime.now()
-    now = current_time.strftime("[%d-%m-%Y %H:%M:%S:%f]\t")
+    now = current_time.strftime("%d-%m-%Y %H:%M:%S:%f\t")
     print(f'{now}', end='')
+    return now
 
 
 def uuid32():
