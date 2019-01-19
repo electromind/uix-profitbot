@@ -1,13 +1,13 @@
 {
   "app":
   {
-    "pair": "ETH/USDT",
+    "pair": "USDC/USDT",
     "base_asset": "ETH",
     "forced_check_interval_min": "60",
     "pricing_method": "center",
     "only_reverse": "False",
     "xrp_wallet": "rpinhtY4p35bPmVXPbfWRUtZ1w1K1gYShB",
-    "tx_size": "0",
+    "tx_size": 0.8,
     "price_tolerance": "5"
   },
   "referals":
