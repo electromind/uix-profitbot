@@ -4,7 +4,7 @@ from datetime import datetime
 from socket import socket
 from typing import Dict, Any, Union
 
-from src.bot_utils import send_request, get_utc_timestamp, uuid32, get_logger, time_prefix
+from bot_utils import send_request, get_utc_timestamp, uuid32, get_logger, time_prefix
 
 testnet_url = 'https://bitmax-test.io/'
 mainnet_url = 'https://bitmax.io/'
@@ -14,15 +14,18 @@ logger = get_logger('api')
 
 class Bitmax:
     recieved_data: bytes
-
     def __init__(self, user=None, base_url='https://bitmax.io/', pair=None):
         try:
             if user:
-                self.email = user.get('login_name')
+                try:
+                    self.email = user.get('name')
+                except Exception as e:
+                    self.email = '_'.join(['bot', uuid32()[:4]])
+                    #print(f"{self.email}")
                 self.base_url = base_url
-                self.api_key = user.get('api_key')
+                self.api_key = user.get('public_key')
                 self.secret = user.get('secret')
-                self.id = user.get('id')
+                self.id = self.api_key
                 self.account_group = self._get_user_info()
                 self.is_maker = False
                 self.open_orders = []
@@ -35,7 +38,7 @@ class Bitmax:
                     self.pair = pair
             else:
                 raise AttributeError(
-                    'Cant create bot instance, user credentials missing. Please check config file and try again')
+                    'Cant create bot instance, user credentials wrong or missing. Please recheck config file and try again')
         except AttributeError as e:
             print(f"\n{e}")
 
@@ -138,15 +141,18 @@ class Bitmax:
         return resp
 
     @staticmethod
-    def get_tik(pair) -> dict:
+    def get_tik(pair):
         resp = send_request('GET', base_path=f'api/v1/quote?symbol={pair}', ts=get_utc_timestamp())
-        tiker = dict(
-            sell=float(resp.get('askPrice')),
-            sell_size=float(resp.get('bidSize')),
-            buy=float(resp.get('bidPrice')),
-            buy_size=float(resp.get('askSize'))
-        )
-        return tiker
+        if resp is not None:
+            return dict(
+                sell=float(resp.get('askPrice')),
+                sell_size=float(resp.get('bidSize')),
+                buy=float(resp.get('bidPrice')),
+                buy_size=float(resp.get('askSize'))
+            )
+        else:
+            return None
+
 
     @staticmethod
     def get_market_depth(symbol, n=5):
@@ -204,7 +210,7 @@ class Bitmax:
         else:
             r = resp.get('data')
         time_prefix()
-        print(f"{self.email[:5]}\tprice: {params['orderPrice']}\tamount: {params['orderQty']}\tside: {params['side']}")
+        print(f"price: {params['orderPrice']}\tamount: {params['orderQty']}\tside: {params['side']}")
         return r
 
     def get_fills_of_order(self, coid):
@@ -218,7 +224,7 @@ class Bitmax:
             api_sec=self.secret,
             ts=ts)
         return res
-    '''
+
     def is_filled(self, coid):
         order = self.get_fills_of_order(coid=coid)
         if not order['data']:
@@ -227,9 +233,9 @@ class Bitmax:
             return True
         if float(order['data'][0]['l']) < float(order['data'][0]['q']):
             return False
-        if (get_utc_timestamp() - int(order['data'][0]['t'])) > int(trade_interval.ONE_MINUTE):
-            self.cancel_order_by_id(order['data'][0]['coid'])
-            return True
+        # if (get_utc_timestamp() - int(order['data'][0]['t'])) > int(trade_interval.ONE_MINUTE):
+        #     self.cancel_order_by_id(order['data'][0]['coid'])
+        #     return True
         if order['data'][0]['side'] == 'Sell':
             if float(self.get_tik(self.pair).get('sell')) != float(order['data'][0]['p']):
                 self.cancel_order_by_id(order['data'][0]['coid'])
@@ -237,7 +243,7 @@ class Bitmax:
         if order['data'][0]['side'] == 'Buy':
             if float(self.get_tik(self.pair).get('buy')) != float(order['data'][0]['p']):
                 self.cancel_order_by_id(order['data'][0]['coid'])
-    '''
+
     def cancel_order_by_id(self, orig_coid):
         ts = get_utc_timestamp()
         coid = uuid32()
@@ -347,7 +353,12 @@ class Bitmax:
             api_sec=self.secret,
             ts=ts
         )
-        return resp
+        if resp.get('data') is None:
+            return False
+        elif not resp.get('data'):
+            return False
+        else:
+            return resp
 
 
 class WSBitmax(Bitmax):

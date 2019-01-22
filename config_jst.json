@@ -1,0 +1,24 @@
+{
+  "app":
+  {
+    "pair": "USDC/USDT",
+    "pricing_method": "center",
+    "price_tolerance": "5",
+    "tx_size": 0.9
+  },
+  "referals":
+    [
+      {
+        "id": "QHuXVH05JmhRMlmm4zMg7hCz7cE4ejVL",
+        "login_name": "test@test.test",
+        "api_key": "QHuXVH05JmhRMlmm4zMg7hCz7cE4ejVL",
+        "secret": "XtlsLJxbEKNbLbIYVCn31IzDhlv95uK0C0jHJRAJoJKkOqptF88lrG65zv9XqOlh"
+      },
+      {
+        "id": "FJpSG8O0lf3H6LxcOGjf1Wkqq5rBk5kV",
+        "login_name": "test2@test2.test2",
+        "api_key": "FJpSG8O0lf3H6LxcOGjf1Wkqq5rBk5kV",
+        "secret": "n9iGprjt5ZjL73M1tRH3AYh8uQTEShMAiGApSXp7nEkgCHX0qCHw6vI9Ogb4UQka"
+      }
+    ]
+}
