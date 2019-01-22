@@ -1,0 +1,28 @@
+{
+  "app":
+  {
+    "pair": "USDC/USDT",
+    "pricing_method": "center",
+    "price_tolerance": "5",
+    "tx_size": 0.33
+  },
+  "referals":
+    [
+      {
+        "name": "slave1",
+        "public_key": "m2FpSvW9e87LUaXd4NUM6HPRu0ntwAWm",
+        "secret": "3QhxxCp7EX5qTRHr6ykkYWCN5fxm3qHDydnvXpLO7YNLvIuP0IGOIkfVnu2B7uRX"
+      },
+      {
+        "name": "slave2",
+        "public_key": "afHz5yW8lWtJbx3dJHd1znVbKuLgJ331",
+        "secret": "EceM7ccgKulE3AsCwpzcyIUElvegjmDZtMnq4BwgvVizVlDpkkkvXtKOr1x26Dw9"
+      }
+    ],
+  "refer":
+      {
+        "name": "master",
+        "public_key": "UZgZchzUJteqfJqg810EAj7DhTqOuls0",
+        "secret": "oQBaFqC9tCs0v2OLzOXPGYsgo5ydKx4GzKil4QnuQsiJQUCpCYbCVwRMRA4sPYLt"
+      }
+}

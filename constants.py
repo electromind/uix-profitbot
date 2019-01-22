@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import datetime
 class trade_interval:
     ONE_MINUTE = 60000,
     FIVE_MINUTES = 300000,
@@ -7,6 +8,7 @@ class trade_interval:
     SIX_HOURS = 21600000,
     DAY = 86400000
 
+print(datetime.datetime.now().timestamp())
 
 class pricing:
 
