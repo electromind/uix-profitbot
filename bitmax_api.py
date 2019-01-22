@@ -9,10 +9,11 @@ from bot_utils import send_request, get_utc_timestamp, uuid32, get_logger, time_
 testnet_url = 'https://bitmax-test.io/'
 mainnet_url = 'https://bitmax.io/'
 websocket_url = 'wss://bitmax.io/'
-logger = get_logger('api')
+logger = get_logger('tx')
 
 
 class Bitmax:
+    logger = get_logger('api')
     recieved_data: bytes
     def __init__(self, user=None, base_url='https://bitmax.io/', pair=None):
         try:
@@ -209,8 +210,8 @@ class Bitmax:
             r = resp.get('message')
         else:
             r = resp.get('data')
-        time_prefix()
-        print(f"price: {params['orderPrice']}\tamount: {params['orderQty']}\tside: {params['side']}")
+        #time_prefix()
+        #print(f"price: {params['orderPrice']}\tamount: {params['orderQty']}\tside: {params['side']}")
         return r
 
     def get_fills_of_order(self, coid):
@@ -316,7 +317,6 @@ class Bitmax:
         return resp
 
     def get_orders_history(self, start, n, pair, end=datetime.utcnow().timestamp()):
-
         end = end
         ts = get_utc_timestamp()
         if pair is None:
@@ -325,8 +325,8 @@ class Bitmax:
             pair=pair
 
         params = dict(
-            startTime=start,
-            endTime=end,
+            startTime=str(start),
+            endTime=str(end),
             symbol=pair,
             n=n
         )
@@ -340,7 +340,8 @@ class Bitmax:
             api_sec=self.secret,
             ts=ts,
             params=params)
-        return resp['data']
+
+        return resp
 
     def get_open_orders(self):
         ts = get_utc_timestamp()

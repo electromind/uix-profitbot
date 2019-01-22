@@ -14,20 +14,20 @@ import requests
 
 def get_logger(logger_name: str):
     logger = logging.getLogger(logger_name)
+    logging.basicConfig(level=logging.INFO)
     file_handler = logging.FileHandler(''.join(['log/', logger_name, '.log']))
-    file_handler.setLevel(logging.DEBUG)
+    file_handler.setLevel(logging.INFO)
     stream_handler = logging.StreamHandler()
-    stream_handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('[%(asctime)s]\t%(name)s\t%(message)s')
+    stream_handler.setLevel(logging.WARNING)
+    formatter = logging.Formatter('%(created)s - %(name)s - %(message)s')
     file_handler.setFormatter(formatter)
-    file_handler.setFormatter(formatter)
+    stream_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
     logger.addHandler(stream_handler)
     return logger
 
 
 logger = get_logger('utils')
-logger.setLevel(logging.WARNING)
 
 
 def clear_log_data():
@@ -39,12 +39,12 @@ def clear_log_data():
 
 
 # send statistic data to statserver
-def send_log_data():
+def send_log_data(path_from: str, lgr):
     global conn
     try:
         conn = socket.socket()
         conn.connect(('109.104.178.163', 2511))
-        with open('log/tx.log') as f:
+        with open(path_from) as f:
             for line in f.readline():
                 conn.send(bytes(line, 'utf-8'))
 
@@ -61,6 +61,11 @@ def time_prefix():
     current_time = datetime.now()
     now = current_time.strftime("%d-%m-%Y %H:%M:%S:%f\t")
     print(f'{now}', end='')
+    return now
+
+def time_no_prefix():
+    current_time = datetime.now()
+    now = current_time.strftime("[%d-%m-%Y %H:%M:%S]\t")
     return now
 
 

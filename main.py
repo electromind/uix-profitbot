@@ -1,18 +1,24 @@
 # -*- coding: utf-8 -*-
-import os
 import random
 import sys
 from datetime import datetime
 from time import sleep
 
+import constants
 from bitmax_api import Bitmax
 from bot_utils import get_logger, time_prefix, read_config, tx_cross_side
 
 actual = dict()
 log_dir_path = 'log/'
 logfile_name = 'main.log'
+logfile_path = ''.join([log_dir_path, logfile_name])
+ltx_logger = get_logger('tx')
+# if not os.path.exists(logfile_path):
+#     os.mkdir(log_dir_path)
+# elif not os.path.isfile(logfile_path):
+#     f = open(logfile_name, 'a')
+#     f.close()
 takt = {}
-logger = get_logger(logfile_name.rstrip('.log'))
 
 
 def app_setup(config: dict):
@@ -32,17 +38,11 @@ def app_setup(config: dict):
         actual['tx_size'] = float(app_config.get('tx_size')) if float(app_config.get('tx_size')) > 0.0 else 1.0
         actual['last_price_m'] = 0.0
     except KeyError as e:
-        print(f"Invalid key. Check config file: {e}")
+        ltx_logger.error(f"Invalid key. Check config file: {e}")
         sys.exit(1)
     except Exception as e:
-        print(f"app_setup: {e}")
+        ltx_logger.error(f'App setup error: {e}')
         sys.exit(1)
-    logfile_path = ''.join([log_dir_path, logfile_name])
-    if not os.path.exists(log_dir_path):
-        os.mkdir(log_dir_path)
-    elif not os.path.isfile(logfile_path):
-        f = open(logfile_name, 'a')
-        f.close()
     else:
         pass
 
@@ -106,6 +106,7 @@ def create_order(bot: Bitmax, price: float, side: str, amount: float):
         side=side,
         symbol=actual.get('pair')
     )
+    ltx_logger.info(result)
     return result
 
 
@@ -144,7 +145,7 @@ def save_to_log(response_data: dict, price: float, amount: float):
     # create_date (timestamp)
     log = dict(
         #
-        # user_id=b1.id,
+        #user_id=b1.,
         tx_id=response_data.get('coid'),
         create_date=datetime.utcnow().timestamp(),
         price=price,
@@ -209,10 +210,10 @@ def dep_equalizer(pair_balance: dict, owner: Bitmax, fast=False, check_is_filled
             try:
                 price = round(t.get('sell'), 6)
                 tx = create_order(owner, price=price, amount=round(am, 6), side='sell' if not fast else 'buy')
+                ltx_logger.info(tx)
+            except Exception:
                 time_prefix()
-                print(tx)
-            except Exception as e:
-                print(f"{e}")
+                print(f"Equalizer fail to create order when {actual.get('left')} > {actual.get('right')}")
             if check_is_filled and tx['coid']:
                 if is_filled(bot=owner, txid=tx['coid']):
                     return True
@@ -220,6 +221,7 @@ def dep_equalizer(pair_balance: dict, owner: Bitmax, fast=False, check_is_filled
                     return False
 
     elif delta < 0:
+
         am = (right_depo - left_depo) / 2.0
         if am < actual['minTx']:
             return False
@@ -227,10 +229,9 @@ def dep_equalizer(pair_balance: dict, owner: Bitmax, fast=False, check_is_filled
             try:
                 price = round(t.get('buy'), 6)
                 tx = create_order(owner, price=price, amount=round(am, 6), side='buy' if not fast else 'sell')
-                time_prefix()
-                print(tx)
-            except Exception as e:
-                logger.error(f"{e}")
+                ltx_logger.info(tx)
+            except Exception:
+                ltx_logger.error(f"Equalizer fail to create order when {actual.get('right')} > {actual.get('left')}")
             if check_is_filled and tx['coid']:
                 if is_filled(bot=owner, txid=tx['coid']):
                     return True
@@ -244,7 +245,6 @@ def equalize_funds(funds: list, bot1, bot2, fast=False):
 
 
 def mine(bot1: Bitmax, bot2: Bitmax, bot_funds: list):
-    global last_price_middle
     r_side = random.choice(['sell', 'buy'])
     unit = 'left' if r_side == 'sell' else 'right'
     # c_unit = 'left' if unit == 'right' else 'right'
@@ -271,14 +271,8 @@ def mine(bot1: Bitmax, bot2: Bitmax, bot_funds: list):
     if tik_now.get('delta') <= 3.0 and am_maker > actual.get('minTx') and am_taker > actual.get('minTx'):
         rev_tx = create_order(bot=maker[0], price=price, amount=am_maker, side=r_side)
         mine_tx = create_order(bot=taker[0], price=price, amount=am_taker, side=tx_cross_side(r_side))
-        time_prefix()
-        print(rev_tx)
-        logger.info(rev_tx)
-        time_prefix()
-        print(mine_tx)
-        logger.info(mine_tx)
-        time_prefix()
-        print(f"Delta: {tik_now.get('delta')}")
+        ltx_logger.info(rev_tx)
+        ltx_logger.info(mine_tx)
     elif tik_now.get('delta') >= 3:
         bot1.cancel_open_orders_by_pair_or_all()
         bot2.cancel_open_orders_by_pair_or_all()
@@ -295,13 +289,19 @@ def check_my_orders(bot1: Bitmax, bot2: Bitmax, lp_middle):
         bot2.cancel_open_orders_by_pair_or_all()
         actual['last_price_m'] = t.get('middle')
 
+
 if __name__ == '__main__':
     bot_one, bot_two = auth_start()
     bot_funds = get_balance_list(b1=bot_one, b2=bot_two)
     equalize_funds(bot_funds, bot_one, bot_two, fast=True)
-    while True:
-        bot_funds = get_balance_list(b1=bot_one, b2=bot_two)
-        equalize_funds(bot_funds, bot_one, bot_two, fast=False)
-        mine(bot1=bot_one, bot2=bot_two, bot_funds=bot_funds)
-        check_my_orders(bot_one, bot_two, actual['last_price_m'])
-        #sleep(1)
+
+    hist1 = bot_one.get_orders_history(start=int(datetime.utcnow().timestamp()) - int(constants.trade_interval.HOUR[0])*5, n=100, pair=actual.get('pair'))['data']['data']
+    hist2 = bot_two.get_orders_history(start=int(datetime.utcnow().timestamp()) - int(constants.trade_interval.HOUR[0])*3, n=100, pair=actual.get('pair'))['data']['data']
+    start = datetime.utcnow().timestamp()
+    d = constants.trade_interval.HOUR[0]
+    # while True:
+    #     bot_funds = get_balance_list(b1=bot_one, b2=bot_two)
+    #     equalize_funds(bot_funds, bot_one, bot_two, fast=False)
+    #     mine(bot1=bot_one, bot2=bot_two, bot_funds=bot_funds)
+    #     check_my_orders(bot_one, bot_two, actual['last_price_m'])
+    #     #sleep(1)

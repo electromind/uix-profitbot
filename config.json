@@ -4,7 +4,7 @@
     "pair": "USDC/USDT",
     "pricing_method": "center",
     "price_tolerance": "5",
-    "tx_size": 0.24
+    "tx_size": 0.33
   },
   "referals":
     [
