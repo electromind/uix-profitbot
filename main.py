@@ -299,9 +299,9 @@ if __name__ == '__main__':
     hist2 = bot_two.get_orders_history(start=int(datetime.utcnow().timestamp()) - int(constants.trade_interval.HOUR[0])*3, n=100, pair=actual.get('pair'))['data']['data']
     start = datetime.utcnow().timestamp()
     d = constants.trade_interval.HOUR[0]
-    # while True:
-    #     bot_funds = get_balance_list(b1=bot_one, b2=bot_two)
-    #     equalize_funds(bot_funds, bot_one, bot_two, fast=False)
-    #     mine(bot1=bot_one, bot2=bot_two, bot_funds=bot_funds)
-    #     check_my_orders(bot_one, bot_two, actual['last_price_m'])
-    #     #sleep(1)
+    while True:
+        bot_funds = get_balance_list(b1=bot_one, b2=bot_two)
+        equalize_funds(bot_funds, bot_one, bot_two, fast=False)
+        mine(bot1=bot_one, bot2=bot_two, bot_funds=bot_funds)
+        check_my_orders(bot_one, bot_two, actual['last_price_m'])
+        #sleep(1)
