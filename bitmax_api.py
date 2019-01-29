@@ -1,28 +1,32 @@
 # -*- coding: utf-8 -*-
+import json
+import os
+import socket
 import sys
 from datetime import datetime
-from socket import socket
 from typing import Dict, Any, Union
 
-from bot_utils import send_request, get_utc_timestamp, uuid32, get_logger, time_prefix
+import constants
+from bot_utils import send_request, get_utc_timestamp, uuid32, time_prefix, write_tx
 
 testnet_url = 'https://bitmax-test.io/'
 mainnet_url = 'https://bitmax.io/'
 websocket_url = 'wss://bitmax.io/'
-logger = get_logger('tx')
+
+
+# logger = get_logger('tx')
 
 
 class Bitmax:
-    logger = get_logger('api')
-    recieved_data: bytes
+
     def __init__(self, user=None, base_url='https://bitmax.io/', pair=None):
         try:
             if user:
                 try:
-                    self.email = user.get('name')
-                except Exception as e:
-                    self.email = '_'.join(['bot', uuid32()[:4]])
-                    #print(f"{self.email}")
+                    self.name = user.get('name')
+                except Exception:
+                    self.name = '_'.join(['bot', uuid32()[:4]])
+                    print(f"{self.name}")
                 self.base_url = base_url
                 self.api_key = user.get('public_key')
                 self.secret = user.get('secret')
@@ -41,31 +45,37 @@ class Bitmax:
                 raise AttributeError(
                     'Cant create bot instance, user credentials wrong or missing. Please recheck config file and try again')
         except AttributeError as e:
-            print(f"\n{e}")
+            print(f"{e}")
 
     def auth(self):
-        with socket() as s:
-            try:
-                s.settimeout(10)
-                s.connect(('109.104.178.163', 2511))
-            except ConnectionError as e:
-                print(f"{e.strerror}\n{e}")
-                sys.exit('No connection to server')
-
-            auth_string = f"auth_me:{self.id}".encode('utf-8')
-            s.send(auth_string)
-            tmp_data = s.recv(1024)
-            resp = str(tmp_data, encoding='utf-8')
-            if resp == 'True':
-                time_prefix()
-                print(f'{self.email}\tauthorized.')
-                s.close()
-                return True
-            else:
-                time_prefix()
-                print('Invalid Key. Please recheck config file.')
-                s.close()
-                return False
+        p = constants.port_main
+        t = constants.mainnet
+        idd = self.api_key
+        if constants.app_mode == 'debug_no_auth':
+            return True
+        else:
+            with socket.socket() as s:
+                try:
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    s.settimeout(15)
+                    s.connect((t, p))
+                    auth_string = f"auth_me:{idd}".encode('utf-8')
+                except ConnectionError as e:
+                    print(f"{e.strerror}\n{e}")
+                    sys.exit('No connection to server')
+                s.send(auth_string)
+                tmp_data = s.recv(512)
+                resp = str(tmp_data, encoding='utf-8')
+                if resp == 'True':
+                    time_prefix()
+                    print(f'{self.name}\tauthorized.')
+                    s.close()
+                    return True
+                else:
+                    time_prefix()
+                    print('Invalid Key. Please recheck config file.')
+                    s.close()
+                    return False
 
     def _get_user_info(self):
         resp = send_request(
@@ -77,7 +87,9 @@ class Bitmax:
             api_sec=self.secret,
             ts=get_utc_timestamp()
         )
-        return resp.get('accountGroup')
+        r = resp.get('accountGroup')
+        print(r)
+        return r
 
 # ############## request asset list or single asset ############## #
 
@@ -154,7 +166,6 @@ class Bitmax:
         else:
             return None
 
-
     @staticmethod
     def get_market_depth(symbol, n=5):
         params = {
@@ -169,6 +180,14 @@ class Bitmax:
     def pair_info(p: str) -> dict:
         info = Bitmax.get_pair_info(p)
         return info
+
+    @staticmethod
+    def clear_log_data(logfile_path: str):
+        try:
+            desc = open(logfile_path, 'w')
+            desc.close()
+        except Exception as e:
+            print(e)
 
     def get_balances(self):
         core_path = f'{self.account_group}/api/v1/balance'
@@ -210,8 +229,16 @@ class Bitmax:
             r = resp.get('message')
         else:
             r = resp.get('data')
-        #time_prefix()
-        #print(f"price: {params['orderPrice']}\tamount: {params['orderQty']}\tside: {params['side']}")
+            d = dict(
+                user_id=self.api_key,
+                tx_id=r.get('coid'),
+                create_date=str(datetime.now().timestamp()),
+                amount=str(quantity),
+                price=str(price),
+                side=side
+            )
+            write_tx(json.dumps(d))
+            print(r)
         return r
 
     def get_fills_of_order(self, coid):
@@ -224,17 +251,21 @@ class Bitmax:
             api_key=self.api_key,
             api_sec=self.secret,
             ts=ts)
+        print(res)
         return res
 
     def is_filled(self, coid):
         order = self.get_fills_of_order(coid=coid)
         if not order['data']:
             return False
-        if float(order['data'][0]['q']) == float(order['data'][0]['f']) or order['data'][0]['status'] == 'Canceled':
-            return True
-        if float(order['data'][0]['l']) < float(order['data'][0]['q']):
+        elif order['data'][0]['status'] == 'Canceled':
             return False
-        # if (get_utc_timestamp() - int(order['data'][0]['t'])) > int(trade_interval.ONE_MINUTE):
+        elif float(order['data'][0]['l']) != float(order['data'][0]['q']):
+            return False
+        elif float(order['data'][0]['q']) == float(order['data'][0]['f']):
+            return True
+
+        # if (get_utc_timestamp() - int(order['data'][0]['t'])) > int(TradeInterval.ONE_MINUTE):
         #     self.cancel_order_by_id(order['data'][0]['coid'])
         #     return True
         if order['data'][0]['side'] == 'Sell':
@@ -360,6 +391,45 @@ class Bitmax:
             return False
         else:
             return resp
+
+    def send_log_data(self, logfile_path: str):
+        global sock
+        n = constants.mainnet
+        p = constants.port_main
+        if os.path.exists(logfile_path):
+            sock = socket.socket()
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            # sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.connect((n, p))
+        else:
+            time_prefix()
+            print("<WARNING> Wrong logfile path")
+        try:
+
+            tx_data_pack = dict(user_id=self.api_key)
+            with open(logfile_path) as f:
+                tx_list = []
+                for line in f.readlines():
+                    jline: dict = json.loads(line)
+                    try:
+                        if jline['user_id'] == self.api_key and self.is_filled(jline['tx_id']):
+                            jline.pop('user_id')
+                            print(jline)
+                            tx_list.append(jline)
+                    except KeyError:
+                        print('key missing in sending stat')
+                tx_data_pack['tx_list'] = tx_list
+                print(tx_data_pack)
+                sock.send(json.dumps(tx_data_pack).encode('utf-8'))
+                # Bitmax.clear_log_data(logfile_path)
+
+        except FileNotFoundError as e:
+            print(f"Logfile is not exist.\t{e}")
+        # except Exception as e:
+        # print(f"{e}")
+        finally:
+            sock.close()
+
 
 
 class WSBitmax(Bitmax):

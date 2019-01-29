@@ -4,12 +4,16 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 import random
 import socket
 import string
+import sys
 from datetime import datetime
 
 import requests
+
+import constants
 
 
 def get_logger(logger_name: str):
@@ -30,31 +34,44 @@ def get_logger(logger_name: str):
 logger = get_logger('utils')
 
 
-def clear_log_data():
-    try:
-        desc = open('log/tx.log', 'w')
-        desc.close()
-    except Exception as e:
-        print(e)
+def write_tx(txid: str):
+    if isinstance(txid, str):
+        with open('log/tx.log', mode='a') as f:
+            f.writelines(''.join([txid, '\n']))
+            f.close()
 
 
 # send statistic data to statserver
-def send_log_data(path_from: str, lgr):
+def send_log_data(userkey: str, logfile_path: str):
     global conn
-    try:
+    if os.path.exists(logfile_path):
         conn = socket.socket()
-        conn.connect(('109.104.178.163', 2511))
-        with open(path_from) as f:
-            for line in f.readline():
-                conn.send(bytes(line, 'utf-8'))
-
+    else:
+        sys.exit("wrong file path")
+    try:
+        conn.connect((constants.network, constants.port))
+        tx_data_pack = dict(user_id=userkey)
+        with open(logfile_path) as f:
+            tx_list = []
+            for line in f.readlines():
+                tx_list.append(line)
+            tx_data_pack['tx_list'] = tx_list
+            conn.send(bytes(json.dumps(tx_data_pack), 'utf-8'))
+        clear_log_data(logfile_path)
     except FileNotFoundError as e:
         logger.error(f"Logfile is not exist.\t{e}")
     except Exception as e:
         logger.error(f"{e}")
     finally:
-        clear_log_data()
         conn.close()
+
+
+def clear_log_data(logfile_path: str):
+    try:
+        desc = open(logfile_path, 'w')
+        desc.close()
+    except Exception as e:
+        print(e)
 
 
 def time_prefix():
@@ -62,6 +79,7 @@ def time_prefix():
     now = current_time.strftime("%d-%m-%Y %H:%M:%S:%f\t")
     print(f'{now}', end='')
     return now
+
 
 def time_no_prefix():
     current_time = datetime.now()
@@ -138,6 +156,15 @@ def send_request(method, base_path, is_signed=False, base_url='https://bitmax.io
 def read_config() -> dict:
     try:
         with open('config.json', 'r') as f:
+            config = json.loads(f.read())
+            return dict(config)
+    except Exception as err:
+        print(f"{err.args}")
+
+
+def read_test_config() -> dict:
+    try:
+        with open('config_test.json', 'r') as f:
             config = json.loads(f.read())
             return dict(config)
     except Exception as err:
