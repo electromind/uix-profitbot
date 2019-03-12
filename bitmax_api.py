@@ -1,71 +1,69 @@
 # -*- coding: utf-8 -*-
+import socket
 import sys
 from datetime import datetime
-from socket import socket
-from typing import Dict, Any, Union
 
-from bot_utils import send_request, get_utc_timestamp, uuid32, get_logger, time_prefix
-
-testnet_url = 'https://bitmax-test.io/'
-mainnet_url = 'https://bitmax.io/'
-websocket_url = 'wss://bitmax.io/'
-logger = get_logger('tx')
+import constants as constants
+from bot_utils import get_utc_timestamp, send_request, time_prefix, uuid32, write_error_log
 
 
 class Bitmax:
-    logger = get_logger('api')
-    recieved_data: bytes
+
     def __init__(self, user=None, base_url='https://bitmax.io/', pair=None):
         try:
             if user:
-                try:
-                    self.email = user.get('name')
-                except Exception as e:
-                    self.email = '_'.join(['bot', uuid32()[:4]])
-                    #print(f"{self.email}")
                 self.base_url = base_url
                 self.api_key = user.get('public_key')
                 self.secret = user.get('secret')
                 self.id = self.api_key
                 self.account_group = self._get_user_info()
-                self.is_maker = False
-                self.open_orders = []
-
-                if pair is None:
-                    time_prefix()
-                    print('Invalid Pair or missing')
-                    sys.exit(1)
-                else:
+                self.my_orders = []
+                self.limit_to_send_stat = 10
+                self.name = '_'.join(['unit', self.api_key[:4]])
+                try:
+                    self.btmx_limit = int(user.get('btmx_limit'))
+                except Exception as e:
+                    write_error_log('limit - required_config_fields option', e)
+                    sys.exit('limit - required_config_fields option')
+                if pair is not None:
                     self.pair = pair
+                else:
+                    sys.exit('Invalid Pair or missing')
+
             else:
-                raise AttributeError(
-                    'Cant create bot instance, user credentials wrong or missing. Please recheck config file and try again')
-        except AttributeError as e:
-            print(f"\n{e}")
+                raise AttributeError('user credentials wrong or missing. Please recheck config file and try again')
+        except Exception as e:
+            write_error_log(f'{self.name} init error', e)
 
     def auth(self):
-        with socket() as s:
-            try:
-                s.settimeout(10)
-                s.connect(('109.104.178.163', 2511))
-            except ConnectionError as e:
-                print(f"{e.strerror}\n{e}")
-                sys.exit('No connection to server')
+        user_id = self.api_key
 
-            auth_string = f"auth_me:{self.id}".encode('utf-8')
-            s.send(auth_string)
-            tmp_data = s.recv(1024)
-            resp = str(tmp_data, encoding='utf-8')
-            if resp == 'True':
-                time_prefix()
-                print(f'{self.email}\tauthorized.')
-                s.close()
-                return True
-            else:
-                time_prefix()
-                print('Invalid Key. Please recheck config file.')
-                s.close()
-                return False
+        if constants.AppMode.get_app_status() == constants.AppMode.DEBUG:
+            return True
+        else:
+            host, port = constants.AppMode.setup_transport()
+            with socket.socket() as s2:
+                try:
+                    s2.settimeout(20)
+                    s2.connect(constants.AppMode.setup_transport())
+                except ConnectionError as e:
+                    print(f"Connection error {e}")
+                    s2.close()
+                    sys.exit(1)
+                auth_string = f"auth_me:{user_id}".encode('utf-8')
+                s2.send(auth_string)
+                data = s2.recv(4096)
+                resp = str(data, encoding='utf-8')
+                if resp == 'True':
+                    time_prefix()
+                    print(f'{self.name}\tauthorized.')
+                    s2.close()
+                    return True
+                else:
+                    time_prefix()
+                    print('Invalid Key. Please recheck config file.')
+                    s2.close()
+                    return False
 
     def _get_user_info(self):
         resp = send_request(
@@ -77,102 +75,34 @@ class Bitmax:
             api_sec=self.secret,
             ts=get_utc_timestamp()
         )
-        return resp.get('accountGroup')
-
-# ############## request asset list or single asset ############## #
+        return resp
 
     @classmethod
-    def request_assets(cls):
-        try:
-            assets = send_request(method='GET', base_path='api/v1/assets')
-            return assets
-        except Exception as e:
-            time_prefix()
-            print(f'invalid request \t{cls.request_assets.__name__}\n{e}')
-            return sys.exit(1)
+    def get_all_assets(cls):
+        return send_request(method='GET', base_path='api/v1/assets')
 
-    @classmethod
-    def get_assets(cls) -> dict:
-        working_assets = dict()
-        for a in cls.request_assets():
-            if a.get('status') == 'Normal':
-                working_assets[a['assetCode']] = {
-                        'id': a.get('assetCode'),
-                        'name': a.get('assetName'),
-                        'step': round(0.1 ** (a.get('nativeScale')), int(a.get('nativeScale'))),
-                        'nativeScale': a.get('nativeScale')
-                    }
-            else:
-                continue
-
-        return working_assets
-
-    @classmethod
-    def get_asset_info(cls, asset):
-        if isinstance(asset, str):
-            assets = cls.get_assets()
-            if asset in assets.keys():
-                return assets.get(asset)
-            else:
-                print("Wrong asset name")
-                return sys.exit(1)
-        else:
-            print("Wrong asset type")
-            return sys.exit(1)
-
-# ############## trade pair methods ############## #
     @staticmethod
-    def get_pair_info(pair=None) -> Dict[Union[str, Any], Dict[str, Union[float, Any]]]:
-        pairs_info = send_request(method='GET', base_path='api/v1/products')
-        if pair is None:
-            return pairs_info
-        else:
-            for item in pairs_info:
-                try:
-                    if item.get('symbol') == pair:
-                        return item
-                except KeyError as e:
-
-                    print(f'Asset Code or param is invalid.\n{e}')
-                    sys.exit(1)
+    def get_pairs_info():
+        return send_request(method='GET', base_path='api/v1/products')
 
     @staticmethod
     def get_current_fees():
-        resp = send_request('GET', base_path='api/v1/fees', ts=get_utc_timestamp())
-        return resp
+        return send_request('GET', base_path='api/v1/fees')
 
     @staticmethod
     def get_tik(pair):
-        resp = send_request('GET', base_path=f'api/v1/quote?symbol={pair}', ts=get_utc_timestamp())
-        if resp is not None:
-            return dict(
-                sell=float(resp.get('askPrice')),
-                sell_size=float(resp.get('bidSize')),
-                buy=float(resp.get('bidPrice')),
-                buy_size=float(resp.get('askSize'))
-            )
-        else:
-            return None
+        return send_request('GET', base_path=f"api/v1/quote?symbol={pair}")
 
-
-    @staticmethod
-    def get_market_depth(symbol, n=5):
+    def get_market_depth(self, depth=5):
         params = {
-            "symbol": symbol,
-            "n": n
+            "symbol": self.pair.replace('/', '-'),
+            "n": depth
         }
         resp = send_request(method='GET', base_path='api/v1/depth', params=params)
-        r = dict(ask=resp.get('asks'), bid=resp.get('bids'))
-        return r
+        return resp
 
-    @staticmethod
-    def pair_info(p: str) -> dict:
-        info = Bitmax.get_pair_info(p)
-        return info
-
-    def get_balances(self):
+    def get_assets_balance(self, asset):
         core_path = f'{self.account_group}/api/v1/balance'
-        #base_path = ''.join([core_path, f'/{asset}']) if asset is not None and pair is None else core_path
         resp = send_request(
             method='GET',
             is_signed=True,
@@ -182,17 +112,17 @@ class Bitmax:
             ts=get_utc_timestamp(),
             base_path=core_path
         )
-        return resp['data']
+        return resp
 
-    def create_order(self, price, quantity, symbol, order_type, side):
+    def create_order(self, price, qty, side, symbol, order_type='limit'):
         ts = get_utc_timestamp()
         coid = uuid32()
         params = dict(
             coid=coid,
             time=ts,
             symbol=symbol,
-            orderPrice=str(round(price, 6)),
-            orderQty=str(round(quantity, 6)),
+            orderPrice=price,
+            orderQty=qty,
             orderType=order_type,
             side=side
         )
@@ -206,17 +136,11 @@ class Bitmax:
             ts=ts,
             coid=coid,
             params=params)
-        if resp.get('data') is None:
-            r = resp.get('message')
-        else:
-            r = resp.get('data')
-        #time_prefix()
-        #print(f"price: {params['orderPrice']}\tamount: {params['orderQty']}\tside: {params['side']}")
-        return r
+        return resp
 
-    def get_fills_of_order(self, coid):
+    def get_filled_ordes_list(self, coid: str):
         ts = get_utc_timestamp()
-        res = send_request(
+        resp = send_request(
             is_signed=True,
             method='GET',
             base_path=f'{self.account_group}/api/v1/order/fills/{coid}',
@@ -224,26 +148,23 @@ class Bitmax:
             api_key=self.api_key,
             api_sec=self.secret,
             ts=ts)
-        return res
+        if resp['status'] == 'success':
+            return resp['data']
+        else:
+            msg = f"Error get_filled_details()"
+            raise Exception([msg, resp])
 
-    def is_filled(self, coid):
-        order = self.get_fills_of_order(coid=coid)
-        if not order['data']:
-            return False
-        if float(order['data'][0]['q']) == float(order['data'][0]['f']) or order['data'][0]['status'] == 'Canceled':
-            return True
-        if float(order['data'][0]['l']) < float(order['data'][0]['q']):
-            return False
-        # if (get_utc_timestamp() - int(order['data'][0]['t'])) > int(trade_interval.ONE_MINUTE):
-        #     self.cancel_order_by_id(order['data'][0]['coid'])
-        #     return True
-        if order['data'][0]['side'] == 'Sell':
-            if float(self.get_tik(self.pair).get('sell')) != float(order['data'][0]['p']):
-                self.cancel_order_by_id(order['data'][0]['coid'])
-
-        if order['data'][0]['side'] == 'Buy':
-            if float(self.get_tik(self.pair).get('buy')) != float(order['data'][0]['p']):
-                self.cancel_order_by_id(order['data'][0]['coid'])
+    def get_filled_order_data(self, coid: str):
+        ts = get_utc_timestamp()
+        resp = send_request(
+            is_signed=True,
+            method='GET',
+            base_path=f'{self.account_group}/api/v1/order/{coid}',
+            api_path='order',
+            api_key=self.api_key,
+            api_sec=self.secret,
+            ts=ts)
+        return resp
 
     def cancel_order_by_id(self, orig_coid):
         ts = get_utc_timestamp()
@@ -265,32 +186,37 @@ class Bitmax:
             coid=coid,
             params=params
         )
+        if resp['data']:
+            return resp['data']
+        else:
+            msg = f"Error cancel_order_by_id({orig_coid}). With params: {params}"
+            raise Exception([msg, resp])
+
+    def cancel_open_orders_by_pair_or_all(self):
+        ts = get_utc_timestamp()
+        resp = send_request(
+            is_signed=True,
+            method='DELETE',
+            base_path=f'{self.account_group}/api/v1/order/all?symbol={self.pair.replace("-", "/")}',
+            api_path='order/all',
+            api_key=self.api_key,
+            api_sec=self.secret,
+            ts=ts
+        )
         return resp
 
-    def cancel_open_orders_by_pair_or_all(self, symbol=None):
+    def cancel_all_open_orders(self):
         ts = get_utc_timestamp()
-        if symbol is not None:
-            resp = send_request(
-                is_signed=True,
-                method='DELETE',
-                base_path=f'{self.account_group}/api/v1/order/all?symbol={symbol.replace("-", "/")}',
-                api_path='order/all',
-                api_key=self.api_key,
-                api_sec=self.secret,
-                ts=ts
-            )
-            return resp
-        else:
-            resp = send_request(
-                is_signed=True,
-                method='DELETE',
-                base_path=f'{self.account_group}/api/v1/order/all',
-                api_path='order/all',
-                api_key=self.api_key,
-                api_sec=self.secret,
-                ts=ts
-            )
-            return resp
+        resp = send_request(
+            is_signed=True,
+            method='DELETE',
+            base_path=f'{self.account_group}/api/v1/order/all',
+            api_path='order/all',
+            api_key=self.api_key,
+            api_sec=self.secret,
+            ts=ts
+        )
+        return resp
 
     def withdraw_asset(self, asset, amount, to_addr):
         ts = get_utc_timestamp()
@@ -313,21 +239,15 @@ class Bitmax:
             coid=coid,
             params=params
         )
-        print(f"\t{resp}")
         return resp
 
-    def get_orders_history(self, start, n, pair, end=datetime.utcnow().timestamp()):
-        end = end
+    def get_orders_history(self, start_in_min=5, n=50, end=datetime.now().timestamp()):
         ts = get_utc_timestamp()
-        if pair is None:
-            return False
-        else:
-            pair=pair
-
+        one_minute = constants.TradeInterval.ONE_MINUTE
         params = dict(
-            startTime=str(start),
+            startTime=str(end - one_minute * start_in_min),
             endTime=str(end),
-            symbol=pair,
+            symbol=self.pair,
             n=n
         )
 
@@ -354,55 +274,4 @@ class Bitmax:
             api_sec=self.secret,
             ts=ts
         )
-        if resp.get('data') is None:
-            return False
-        elif not resp.get('data'):
-            return False
-        else:
-            return resp
-
-
-class WSBitmax(Bitmax):
-    def __init__(self, ws_url=websocket_url, pair=None, user=None, depths=20, trades=20, *args, **kwargs):
-        if user is None:
-            print("Cant create bot intance without user credentials. Please check config file and try again")
-            sys.exit(1)
-        else:
-            self.user = user
-        if pair is None:
-            print("Cant create bot intance without trade pair name. Please check config file and try again")
-            sys.exit(1)
-        else:
-            self.pair = pair.replace("/", "-")
-        super().__init__(base_url=ws_url, pair=pair, user=user)
-        self.account_group = self._get_user_info()
-        self.entry_point = ''.join([self.base_url, str(self.account_group), '/api/stream/'])
-        self._depths = max(1, int(depths))
-        self._trades = max(1, int(trades))
-
-
-class Order:
-    def __init__(self, amount, price, side, api_key, secret, pair):
-        self.amount = amount
-        self.price = price
-        self.side = side
-        self.key = api_key
-        self.secret = secret
-        self.pair = pair
-        self.id = None
-
-    def place_order(self, path, api_path, **param):
-        if isinstance(path, str) and isinstance(api_path, str):
-            try:
-                coid = uuid32()
-                ts = get_utc_timestamp()
-                params = dict(param)
-            except Exception as e:
-                print(e)
-
-    def get_status(self):
-        if self.id is None:
-            pass
-        else:
-            pass
-
+        return resp

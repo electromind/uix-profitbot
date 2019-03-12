@@ -1,7 +1,5 @@
-{
-  "app":
-  {
-    "pair": "USDC/USDT",
+[app]
+pair: "USDC/USDT",
     "base_asset": "ETH",
     "forced_check_interval_min": "60",
     "pricing_method": "center",

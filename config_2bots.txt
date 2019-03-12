@@ -1,0 +1,18 @@
+[settings]
+pair: USDC/USDT
+pricing: center
+size: 50%
+spread: 3
+
+[accounts]
+#acc_1
+public_key: yRo5Gb8OCsINe9NIZMaOjt443hGVSkCJ
+private_key: nZPuNI2WB9GPEcW7a57pkF8C2bimB8kSUR7nO36Wo6BUdeMyKLwF87OQiiZN6G68
+btmx_limit": 50%
+mining_limit: 20%
+
+#acc_2
+public_key: dIoNQ7xLUxuHkSyWmL04AIkKJlsdhl7D
+private_key: xOChXmmfyWO3wEX1ehpCDnEenf5bSSiz8TybzapM5B59bnWU3vJv2QuTgB4SAgPF
+btmx_limit: 500
+mining_limit: 20%
