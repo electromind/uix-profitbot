@@ -1,7 +1,8 @@
-public_key: FJpSG8O0lf3H6LxcOGjf1Wkqq5rBk5kV
-private_key: n9iGprjt5ZjL73M1tRH3AYh8uQTEShMAiGApSXp7nEkgCHX0qCHw6vI9Ogb4UQka
-size: 50%
+public_key: yRo5Gb8OCsINe9NIZMaOjt443hGVSkCJ
+private_key: nZPuNI2WB9GPEcW7a57pkF8C2bimB8kSUR7nO36Wo6BUdeMyKLwF87OQiiZN6G68
+tolerance: 5%
 spread: 3
 pair: USDC/USDT
-btmx_limit: 50%
-mining_limit: 40%
+mining_limit: 20%
+role: mine
+server_timeout_sec: 5

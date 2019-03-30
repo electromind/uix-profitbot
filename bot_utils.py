@@ -5,17 +5,20 @@ import hmac
 import json
 import logging
 import os
+import pathlib
 import random
 import string
-import struct
 import sys
 import time
 from datetime import datetime
 from socket import socket, AF_INET, SOCK_STREAM
-import constants
+
 import requests
-from termcolor import colored
 from requests.exceptions import RequestException as ReqError
+from termcolor import colored
+
+from constants import AppMode
+from req_counter import ReqCounter as MyRequests
 
 error_log_path = 'log/errors.log'
 tx_log_path = 'log/tx.log'
@@ -30,73 +33,50 @@ required_config_fields = [
 ]
 
 
+def time_now():
+    return datetime.now().strftime('[%d-%m-%Y %H:%M:%S:%f]')
+
+
 def time_prefix():
     current_time = datetime.now()
     now = current_time.strftime("%H:%M:%S ")
     print(f'{now}', end='')
 
 
-try:
-    log_files = [error_log_path, tx_log_path]
-    if not os.path.exists('log/'):
-        os.mkdir(''.join([os.getcwd(), '/log']))
-    else:
-        for name in log_files:
-            if not os.path.exists(name):
-                with open(name, mode='w') as f:
-                    f.close()
-except Exception as e:
-    msg = f"{time_prefix()} {e}"
+class Log(logging.Logger):
+
+    def __init__(self, n: str, loglevel=logging.INFO):
+        super().__init__(name=n, level=loglevel)
+        format('%(levelname)s %(message)s')
+        # self.logger_format = '%(levelname)s %(message)s'
+        # if platform.system() == 'Windows':
+        #     separator = '\\'
+        # else:
+        #     separator = '/'
+        # # tmp = str(__file).replace('.py', '_').split(separator)
+
+        self.logfile_name = ''.join([n, time_now(), '.log'])
+        self.__logdir_path = pathlib.Path('\\'.join([os.path.dirname(__file__), 'log']))
+        if not os.path.exists(self.__logdir_path):
+            os.mkdir(self.__logdir_path)
+        self.__path_to_log = self.__logdir_path / self.logfile_name
+
+        if not os.path.isfile(self.__path_to_log):
+            file = self.__path_to_log.open('w')
+            file.close()
+
+        logfile_handler = logging.FileHandler(filename=self.__path_to_log, encoding='utf-8')
+        self.addHandler(logfile_handler)
+        logstream = logging.StreamHandler()
+        self.addHandler(logstream)
 
 
-def get_logger(logger_name: str):
-    logger = logging.getLogger(logger_name)
-    logging.basicConfig(level=logging.INFO)
-    file_handler = logging.FileHandler(''.join(['log/', logger_name, '.log']))
-    file_handler.setLevel(logging.INFO)
-    stream_handler = logging.StreamHandler()
-    stream_handler.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(created)s - %(name)s - %(message)s')
-    file_handler.setFormatter(formatter)
-    stream_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-    logger.addHandler(stream_handler)
-    return logger
-
-
-logger = get_logger('utils')
-
-
-def write_error_log(msg: str, error=None):
-    if isinstance(msg, str) and os.path.exists('log/errors.log'):
-        err_flag = colored('ERR', color='red', attrs=['bold', 'blink'])
-        timer = datetime.now().strftime("[%d-%m-%Y %H:%M:%S]")
-        e_msg = f"{msg}\t{error.args}"
-        try:
-            with open('log/errors.log', mode='a') as f:
-                f.write('\t'.join([timer, e_msg, '\n']))
-                print(f"{time_prefix()} [{err_flag}]\terror was detected >> {e_msg}")
-                f.close()
-        except Exception as e:
-            write_error_msg = f"{time_prefix()}\tcant log error.\n{time_prefix()}\t{e}\n{time_prefix()}\t{e.args}"
-            logger.error(msg=write_error_msg)
+logger = Log('utils_')
+r = MyRequests()
 
 
 def write_tx_log(tx_id: str, tx_side):
-    # if tx_side == 'buy':
-    #     flag = colored('BUY', color='green', attrs=['bold'])
-    # elif tx_side == 'sell':
-    #     flag = colored('SELL', color='magenta', attrs=['bold'])
-    # else:
-    #     flag = colored('TX', color='blue', attrs=['bold'])
-    if isinstance(tx_id, str):
-        with open('log/tx.log', mode='a') as f:
-            f.write(tx_id + "\n")
-            # print(f"[{flag}]\t{tx_id}")
-            f.close()
-    else:
-        e_msg = f"{time_prefix()} Error: logfile not exist."
-        logger.error(msg=e_msg)
+    pass
 
 
 def get_config(path: str):
@@ -125,17 +105,14 @@ def get_config(path: str):
 
 
 def countdown(sec):
+    tmp_time = time_now()
     for i in range(sec, -1, -1):
         counter = colored(f'{i}', color='cyan', attrs=['blink', 'bold'])
-        text = colored("\rMiner starts in: {0} seconds".format(counter))
+        text = colored("\r{0} Miner starts in: {1} seconds".format(tmp_time, counter))
         sys.stdout.write(f"\r{text}")
         sys.stdout.flush()
         time.sleep(1)
     print('')
-
-
-def time_now():
-    return datetime.now().strftime('[%d-%m-%Y %H:%M:%S:%f]')
 
 
 def uuid32():
@@ -160,6 +137,9 @@ def make_auth_header(timestamp, api_path, api_key, secret, coid=None):
 
     if coid is None:
         msg = bytearray(f"{timestamp}+{api_path}".encode("utf-8"))
+    elif isinstance(coid, list):
+        coids = '+'.join(coid)
+        msg = bytearray(f"{timestamp}+{api_path}+{coids}".encode("utf-8"))
     else:
         msg = bytearray(f"{timestamp}+{api_path}+{coid}".encode("utf-8"))
 
@@ -175,10 +155,21 @@ def make_auth_header(timestamp, api_path, api_key, secret, coid=None):
     if coid is not None:
         header["x-auth-coid"] = coid
         header["Content-Type"] = 'application/json'
-        return header
+    return header
 
 
-def send_request(method, base_path, is_signed=False, base_url='https://bitmax.io/', api_path=None, api_key=None, api_sec=None, params=None, ts=None, coid=None):
+def send_request(
+        method,
+        base_path,
+        is_signed=False,
+        base_url='https://bitmax.io/',
+        api_path=None,
+        api_key=None,
+        api_sec=None,
+        params=None,
+        ts=None,
+        coid=None
+):
     try:
         full_url = base_url + base_path
         if is_signed:
@@ -190,26 +181,29 @@ def send_request(method, base_path, is_signed=False, base_url='https://bitmax.io
 
         if response and response.status_code == 200:
             t = response.json()
-            # print(time_prefix())
-            print(f"{datetime.now().strftime('%d-%m-%Y %H:%M:%S:%f')} {t}")
-            logger.debug(msg=t)
+            r.add()
+            print(f'Total: {r.get_total()}')
             return t
         else:
             raise ReqError()
     # except requests.exceptions.ConnectionError as err:
     #     return {'error': f'{err.errno}', 'data': f'{err.args}'}
     except Exception as err:
-        return {'error': f'{err.args}', 'data': f'url: {full_url}\tmethod: {method}\nPARAMS:\n{params}'}
+        return dict(
+            error=f'{err.args}',
+            data=f'url: {full_url}',
+            method=method,
+            params=params,
+        )
 
 
-def read_config() -> dict:
+def read_config(path: str) -> dict:
     try:
-        with open('config.txt', 'r') as f:
+        with open(path, 'r') as f:
             config = json.loads(f.read())
             return dict(config)
     except Exception as err:
-        msg = f"{time_prefix()} Error: reading config. read_config()"
-        write_error_log(msg, err)
+        msg = f"{time_now()} Error: reading config. read_config()"
         logger.error(msg, err)
 
 
@@ -226,45 +220,41 @@ def tx_cross_side(side: str) -> str:
     return 'buy' if side == 'sell' else 'sell'
 
 
-class LazyConnection:
-    def __init__(self, address, family=AF_INET, s_type=SOCK_STREAM):
-        self.address = address
-        self.family = family
-        self.type = s_type
-        self.sock = None
+class TCPClient:
+    def __init__(self, server_address=None):
+        self.my_socket = socket(AF_INET, SOCK_STREAM)
+        if server_address is None:
+            self.address = (AppMode.mainnet, AppMode.port_main)
+        else:
+            self.address = server_address
 
-    def __enter__(self):
-        if self.sock is not None:
-            raise RuntimeError('Already connected')
-        self.sock = socket(self.family, self.type)
-        self.sock.connect(self.address)
-        return self.sock
+    def start(self, addr: tuple):
+        self.my_socket = socket(AF_INET, SOCK_STREAM)
+        self.my_socket.settimeout(10)
+        try:
+            self.my_socket.connect(addr)
+        except ConnectionRefusedError as err:
+            print(f"{time_now()} {err}")
+            countdown(5)
+            # logger.info(f'\nServer offline. Reconnect after {countdown(5)} sec')
 
-    def __exit__(self, exc_ty, exc_val, tb):
-        self.sock.close()
-        self.sock = None
+            self.start(addr=addr)
 
-
-def send_msg(sock, msg):
-    # Prefix each message with a 4-byte length (network byte order)
-    # msg = struct.pack('>I', len(msg)) + msg
-    sock.sendall(msg)
-
-def recv_msg(sock):
-    # Read message length and unpack it into an integer
-    raw_msglen = recvall(sock, 1024)
-    if not raw_msglen:
-        return None
-    msglen = struct.unpack('>I', raw_msglen)[0]
-    # Read the message data
-    return recvall(sock, raw_msglen)
-
-def recvall(sock, n):
-    # Helper function to recv n bytes or return None if EOF is hit
-    data = b''
-    while len(data) < n:
-        packet = sock.recv(n - len(data))
-        if not packet:
-            return None
-        data += packet
-    return data
+    def send_msg(self, smsg: str):
+        self.start(self.address)
+        raw_msg = bytes(smsg.encode('utf-8'))
+        data = b""
+        try:
+            self.my_socket.send(raw_msg)
+            while True:
+                packet = self.my_socket.recv(2048)
+                if packet:
+                    data += packet
+                else:
+                    break
+        except Exception as err:
+            print(f"\n{err}")
+        # print(f">>> {data.decode('utf-8')}")
+        # self.send_msg(smsg=smsg)
+        self.my_socket.close()
+        return str(data, encoding='utf-8')

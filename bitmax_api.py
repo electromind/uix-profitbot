@@ -4,7 +4,7 @@ import sys
 from datetime import datetime
 
 import constants as constants
-from bot_utils import get_utc_timestamp, send_request, time_prefix, uuid32, write_error_log
+from bot_utils import get_utc_timestamp, send_request, time_prefix, uuid32
 
 
 class Bitmax:
@@ -20,11 +20,7 @@ class Bitmax:
                 self.my_orders = []
                 self.limit_to_send_stat = 10
                 self.name = '_'.join(['unit', self.api_key[:4]])
-                try:
-                    self.btmx_limit = int(user.get('btmx_limit'))
-                except Exception as e:
-                    write_error_log('limit - required_config_fields option', e)
-                    sys.exit('limit - required_config_fields option')
+
                 if pair is not None:
                     self.pair = pair
                 else:
@@ -33,7 +29,7 @@ class Bitmax:
             else:
                 raise AttributeError('user credentials wrong or missing. Please recheck config file and try again')
         except Exception as e:
-            write_error_log(f'{self.name} init error', e)
+            print(e)
 
     def auth(self):
         user_id = self.api_key
@@ -91,7 +87,7 @@ class Bitmax:
 
     @staticmethod
     def get_tik(pair):
-        return send_request('GET', base_path=f"api/v1/quote?symbol={pair}")
+        return send_request('GET', base_path=f"api/v1/quote?a={pair}")
 
     def get_market_depth(self, depth=5):
         params = {

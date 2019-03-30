@@ -27,6 +27,13 @@ class AppMode:
             return cls.uixlab_local, cls.port_dev
 
 
+class PBProtocol:
+    ONLINE = 'online#'
+    AUTH = 'auth#'
+    TX = 'tx_stat#'
+    SYNC = 'sync#'
+
+
 class Role:
     MINER = 'taker'
     REVERSER = 'maker'

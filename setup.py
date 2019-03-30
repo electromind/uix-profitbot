@@ -9,7 +9,7 @@ setup(
     author='electromind',
     license='MIT',
     author_email='electromind.work@gmail.com',
-    install_requires=['requests', 'termcolor'],
+    install_requires=['requests', 'termcolor', 'apscheduler'],
     keywords='bitmax exchange rest api fee mining usdt usdc xrp bitcoin ethereum btc eth neo',
     classifiers=[
         'Intended Audience :: Developers',
