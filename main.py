@@ -150,7 +150,6 @@ class Bot:
                 pair_balance = {}
                 btc = 0.0
                 for item in resp.get('data'):
-
                     if 'assetCode' in dict(item).keys() and self.is_my_pair_asset(item.get('assetCode')):
                         # pair_balance['assetCode'] = float(item.get('availableAmount'))
                         pair_balance[item.get('assetCode')] = float(item.get('availableAmount'))
@@ -192,6 +191,7 @@ class Bot:
                 # return False
         except TypeError as err:
             print(err)
+            return False
 
     def set_loop_state(self, state: str):
         self.loop_state = state
@@ -204,7 +204,7 @@ class Bot:
             time=ts,
             symbol=symbol,
             orderPrice=str(price),
-            orderQty=str(qty * 0.9),
+            orderQty=str(qty * 0.99),
             orderType='limit',
             side=side
         )

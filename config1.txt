@@ -1,0 +1,8 @@
+public_key: qudleuSq5ZUGZD3VOU7CSA8XNNvncst4
+private_key: 7NunIHMLabpRsCvxgSJM8cxXt7RyowvE1rRth5DZqtmW7lEo84DsvcWGSeAERw4Y
+tolerance: 5%
+spread: 3
+pair: USDC/USDT
+mining_limit: 20%
+role: mine
+server_timeout_sec: 5

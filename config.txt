@@ -3,6 +3,6 @@ private_key: 5aCeImPjCirt45dEQBwywNvXTKMv6sSMXroHDcK3M9S7aXBi2M8N8RGeT3DT34cZ
 tolerance: 5%
 spread: 3
 pair: USDC/USDT
-mining_limit: 20%
+mining_limit: 1%
 role: mine
 server_timeout_sec: 5
