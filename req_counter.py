@@ -1,12 +1,14 @@
 class ReqCounter:
-    def __init__(self):
-        self.counter = 0
+    counter = 0
 
-    def add(self):
-        self.counter += 1
+    @classmethod
+    def add(cls):
+        cls.counter += 1
 
-    def get_total(self):
-        return self.counter
+    @classmethod
+    def get_total(cls):
+        return cls.counter
 
-    def flush(self):
-        self.counter = 0
+    @classmethod
+    def flush(cls):
+        cls.counter = 0

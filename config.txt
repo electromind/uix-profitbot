@@ -1,5 +1,5 @@
-public_key: yRo5Gb8OCsINe9NIZMaOjt443hGVSkCJ
-private_key: nZPuNI2WB9GPEcW7a57pkF8C2bimB8kSUR7nO36Wo6BUdeMyKLwF87OQiiZN6G68
+public_key: 79IDpm2gc0w08HVXJ3IKbXtocajY38my
+private_key: 5aCeImPjCirt45dEQBwywNvXTKMv6sSMXroHDcK3M9S7aXBi2M8N8RGeT3DT34cZ
 tolerance: 5%
 spread: 3
 pair: USDC/USDT

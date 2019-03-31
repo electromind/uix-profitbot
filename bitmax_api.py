@@ -37,11 +37,11 @@ class Bitmax:
         if constants.AppMode.get_app_status() == constants.AppMode.DEBUG:
             return True
         else:
-            host, port = constants.AppMode.setup_transport()
+            host, port = constants.AppMode.get_address()
             with socket.socket() as s2:
                 try:
                     s2.settimeout(20)
-                    s2.connect(constants.AppMode.setup_transport())
+                    s2.connect(constants.AppMode.get_address())
                 except ConnectionError as e:
                     print(f"Connection error {e}")
                     s2.close()

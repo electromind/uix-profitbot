@@ -29,7 +29,8 @@ required_config_fields = [
     'size',
     'spread',
     'btmx_limit',
-    'mining_limit'
+    'mining_limit',
+    'role'
 ]
 
 
@@ -154,7 +155,7 @@ def make_auth_header(timestamp, api_path, api_key, secret, coid=None):
 
     if coid is not None:
         header["x-auth-coid"] = coid
-        header["Content-Type"] = 'application/json'
+        # header["Content-Type"] = 'application/json'
     return header
 
 
@@ -181,7 +182,7 @@ def send_request(
 
         if response and response.status_code == 200:
             t = response.json()
-            r.add()
+
             print(f'Total: {r.get_total()}')
             return t
         else:

@@ -1,24 +1,29 @@
 # -*- coding: utf-8 -*-
 import sys
+import time
 from decimal import Decimal
-from pprint import pprint
 
-from apscheduler.schedulers.background import BackgroundScheduler as Runner
-from apscheduler.triggers.interval import IntervalTrigger
-
-from bot_utils import send_request, get_utc_timestamp, time_now, get_config, TCPClient, Log
+# from apscheduler.schedulers.background import BackgroundScheduler
+# from apscheduler.triggers.interval import IntervalTrigger
+# from datetime import datetime
+from bot_utils import send_request, get_utc_timestamp, time_now, get_config, TCPClient, Log, uuid32
 from constants import PBProtocol as PB
 from constants import Role, AppMode
 from req_counter import ReqCounter
 
 logger = Log('core_')
-r = ReqCounter()
+ReqCounter.flush()
 dec = Decimal()
 
 
 class Bot:
     def __init__(self, settings: dict):
         AppMode.set_app_status(AppMode.RELEASE)
+        if 'role' in settings.keys():
+            if settings.get('role') == 'mine':
+                self.role = Role.MINER
+            else:
+                self.role = Role.REVERSER
         self.https_entry_point = 'https://bitmax.io'
         self.websocket_entry_point = 'ws://bitmax.io'
         self.public = settings['public_key']
@@ -30,27 +35,24 @@ class Bot:
         self.name = '...'.join([self.public[:4], self.public[-4:]])
         self.left, self.right = self.pair.split('/')
         self.account_group = self.account_group()
-
         self.statsrv_addr = (AppMode.mainnet, AppMode.port_main)
         self.tcp_client = TCPClient(server_address=self.statsrv_addr)
-        if 'role' in settings.keys():
-            if settings.get('role') == 'mine':
-                self.role = Role.MINER
-            else:
-                self.role = Role.REVERSER
-        self.starting_left = dec.from_float(0.0)
-        self.starting_right = dec.from_float(0.0)
-        self.starting_btmx = dec.from_float(0.0)
-        self.prev_price = dec.from_float(0.0)
-        self.max_amount = dec.from_float(0.0)
-        self.min_amount = dec.from_float(0.0)
-        self.reverse_mining = False
-        self.mining = False
-        self.step = dec.from_float(0.0)
+
+        self.starting_left = 0.0
+        self.starting_right = 0.0
+        self.starting_btmx = 0.0
+        self.starting_btc = 0.0
+        self.prev_price = 0.0
+        self.max_amount = 0.0
+        self.min_amount = 0.0
+        # self.reverse_mining = False
+        # self.mining = False
+        self.step = 0.0
         self.price_scale = 0
         self.loop_state = 'ok'
 
     def _user_info(self):
+        ReqCounter.add()
         resp = send_request(
             is_signed=True,
             method='GET',
@@ -60,7 +62,6 @@ class Bot:
             api_sec=self.secret,
             ts=get_utc_timestamp()
         )
-        r.add()
         return resp
 
     def account_group(self):
@@ -71,31 +72,67 @@ class Bot:
             msg = f"{time_now()} Initialization Error \n{ag}"
             raise Exception(msg)
 
-    def market_state(self):
-        resp = send_request('GET', base_path=f"api/v1/quote?symbol={self.pair}")
-        print(resp)
+    def trade(self):
+        tik = self.tik()
+        bal = self.get_pair_balance()
+        l_bal = bal.get(self.left)
+        r_bal = bal.get(self.right)
+        if tik['delta_step'] <= self.step:
+            if self.role == Role.MINER:
+                if float(bal.get('in_btc')) > self.starting_btc * 0.8:
+                    print(f'{time_now()} now: {float(bal.get("in_btc"))}')
+                    print(f'{time_now()} off {self.starting_btc * 0.8}')
+                    if l_bal >= r_bal:
+                        side = 'sell'
+                        amount = bal[self.left]
+                        price = tik['bid']
+                        print(self.create_order(price=price, qty=amount, side=side, symbol=self.pair))
+                    else:
+                        side = 'buy'
+                        amount = bal[self.right]
+                        price = tik['ask']
+                        print(self.create_order(price=price, qty=amount, side=side, symbol=self.pair))
+                else:
+                    self.role = Role.REVERSER
+            elif self.role == Role.REVERSER:
+                my_token = self.get_pair_balance(asset='BTMX')
+                if my_token['BTMX'] < 1:
+                    self.role = Role.MINER
+                if l_bal >= r_bal:
+                    side = 'sell'
+                    amount = bal[self.left]
+                    price = tik['ask']
+                    self.create_order(price=price, qty=amount, side=side, symbol=self.pair)
+                else:
+                    side = 'buy'
+                    amount = bal[self.right]
+                    price = tik['bid']
+                    self.create_order(price=price, qty=amount, side=side, symbol=self.pair)
 
     def setup_pair(self):
-        r.add()
+        ReqCounter.add()
         for data in send_request(method='GET', base_path='api/v1/products'):
             if isinstance(data, dict):
-                if data.get('symbol') == self.pair:
-                    self.max_amount = dec.from_float(float(data['maxNotional']))
-                    self.min_amount = dec.from_float(float(data['minNotional']))
+                if \
+                        data.get('status') == 'Normal' and \
+                        data.get('miningStatus') == 'Mining,ReverseMining' and \
+                        data.get('symbol') == self.pair:
+                    self.max_amount = float(data['maxNotional'])
+                    self.min_amount = float(data['minNotional'])
                     self.price_scale = int(data['priceScale'])
-                    self.step = dec.from_float(float(data['minQty']) * 10.0 ** self.price_scale)
+                    self.step = float(data['minQty']) * 10.0 ** self.price_scale
                     return data
                 else:
+
                     continue
 
-    def is_pair_asset(self, a):
+    def is_my_pair_asset(self, a):
         if isinstance(a, str) and (a == self.left or a == self.right or a == 'BTMX'):
             return True
         else:
             return False
 
     def get_pair_balance(self, asset=None):
-
         suffix = f'/{asset}' if asset else ''
         core_path = f'{self.account_group}/api/v1/balance' + suffix
         resp = send_request(
@@ -107,24 +144,27 @@ class Bot:
             ts=get_utc_timestamp(),
             base_path=core_path
         )
-        r.add()
+        ReqCounter.add()
         if 'data' in resp.keys():
             if asset is None:
                 pair_balance = {}
+                btc = 0.0
                 for item in resp.get('data'):
 
-                    if 'assetCode' in dict(item).keys() and self.is_pair_asset(item.get('assetCode')):
+                    if 'assetCode' in dict(item).keys() and self.is_my_pair_asset(item.get('assetCode')):
                         # pair_balance['assetCode'] = float(item.get('availableAmount'))
-                        pair_balance[item.get('assetCode')] = dec.from_float(float(item.get('availableAmount')))
-                    elif dec.from_float(float(item['availableAmount'])) > 0:
-                        pair_balance[item.get('assetCode')] = dec.from_float(float(item.get('availableAmount')))
+                        pair_balance[item.get('assetCode')] = float(item.get('availableAmount'))
+                        btc += float(item.get('btcValue'))
+                    elif float(item['availableAmount']) > 0:
+                        pair_balance[item.get('assetCode')] = float(item.get('availableAmount'))
                     else:
                         continue
+                pair_balance['in_btc'] = btc
                 return pair_balance
             else:
                 try:
                     item = resp.get('data')
-                    return {item.get('assetCode'): dec.from_float(float(item.get('availableAmount')))}
+                    return {item.get('assetCode'): float(item.get('availableAmount'))}
                 except KeyError as err:
                     logger.error(err)
         else:
@@ -132,13 +172,14 @@ class Bot:
 
     def tik(self):
         resp = send_request('GET', base_path=f"api/v1/quote?symbol={self.pair}")
+        ReqCounter.add()
         return dict(
-            bid=dec.from_float(float(resp['bidPrice'])),
-            ask=dec.from_float(float(resp['askPrice'])),
-            bSize=dec.from_float(float(resp['bidSize'])),
-            aSize=dec.from_float(float(resp['askSize'])),
-            delta_clean=dec.from_float(float(resp['askPrice']) - float(resp['bidPrice'])),
-            delta_step=dec.from_float((float(resp['askPrice']) - float(resp['bidPrice'])) / self.spread)
+            bid=float(resp['bidPrice']),
+            ask=float(resp['askPrice']),
+            bSize=float(resp['bidSize']),
+            aSize=float(resp['askSize']),
+            delta_clean=float(resp['askPrice']) - float(resp['bidPrice']),
+            delta_step=(float(resp['askPrice']) - float(resp['bidPrice'])) / float(self.spread)
         )
 
     def check_online(self):
@@ -152,51 +193,69 @@ class Bot:
         except TypeError as err:
             print(err)
 
-    def request_limiter(self):
-        if r.get_total() >= 30:
-            self.set_loop_state('pause')
-        else:
-            self.set_loop_state('ok')
-
     def set_loop_state(self, state: str):
         self.loop_state = state
+
+    def create_order(self, price, qty, side, symbol):
+        ts = get_utc_timestamp()
+        coid = uuid32()
+        params = dict(
+            coid=coid,
+            time=ts,
+            symbol=symbol,
+            orderPrice=str(price),
+            orderQty=str(qty * 0.9),
+            orderType='limit',
+            side=side
+        )
+        resp = send_request(
+            is_signed=True,
+            method='POST',
+            base_path=f'{self.account_group}/api/v1/order',
+            api_path='order',
+            api_key=self.public,
+            api_sec=self.secret,
+            ts=ts,
+            coid=coid,
+            params=params)
+        ReqCounter.add()
+        return resp
+
+
+def request_limiter(profitbot: Bot):
+    if ReqCounter.get_total() >= 30:
+        ReqCounter.flush()
+        time.sleep(1)
+        profitbot.set_loop_state('ok')
+    else:
+        profitbot.set_loop_state('ok')
 
 
 def start(profitbot: Bot):
     # countdown(2)
-    my_pair_data = profitbot.setup_pair()
-    pprint(my_pair_data)
-    profitbot.shadow = Runner()
-    profitbot.shadow_interval = IntervalTrigger(seconds=1)
-    profitbot.shadow.add_job(profitbot.request_limiter, max_instances=1, trigger=profitbot.shadow_interval)
-
+    profitbot.loop_state = 'ok'
     if profitbot.check_online():
+        profitbot.setup_pair()
         bal = profitbot.get_pair_balance()
         profitbot.starting_left = bal[profitbot.left]
         profitbot.starting_right = bal[profitbot.right]
         profitbot.starting_btmx = bal['BTMX']
-        for k, v in bal.items():
-            logger.info(f'{k}: {v:.09f}')
-        pprint(profitbot.tik())
+        profitbot.starting_btc = bal['in_btc']
+
     else:
         logger.info(f'Server offline.')
 
 
 def loop(profitbot: Bot, endless=True):
-    global inf
-    inf = endless
-    while True:
-        if profitbot.loop_state == 'ok':
-            pprint(profitbot.market_state())
-
-        elif profitbot.loop_state == 'pause':
-            continue
-        else:
-            break
-        if profitbot.check_online() and inf:
-            pass
-        else:
-            print(f'{profitbot.setup_pair()}\n{r.get_total()}')
+    if profitbot.check_online():
+        while endless:
+            request_limiter(profitbot)
+            if profitbot.loop_state == 'pause':
+                continue
+            elif profitbot.loop_state == 'stop':
+                break
+            elif profitbot.loop_state == 'ok':
+                profitbot.trade()
 
 
 if __name__ == '__main__':
