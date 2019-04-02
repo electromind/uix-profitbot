@@ -6,7 +6,7 @@ from decimal import Decimal
 # from apscheduler.schedulers.background import BackgroundScheduler
 # from apscheduler.triggers.interval import IntervalTrigger
 # from datetime import datetime
-from bot_utils import send_request, get_utc_timestamp, time_now, get_config, TCPClient, Log, uuid32
+from bot_utils import send_request, get_utc_timestamp, time_now, get_config, TCPClient, Log, uuid32, countdown
 from constants import PBProtocol as PB
 from constants import Role, AppMode
 from req_counter import ReqCounter
@@ -79,33 +79,34 @@ class Bot:
         r_bal = bal.get(self.right)
         if tik['delta_step'] <= self.step:
             if self.role == Role.MINER:
-                if float(bal.get('in_btc')) > self.starting_btc * 0.8:
+                if float(bal.get('in_btc')) > self.starting_btc * (1.0 - self.mining_limit):
                     print(f'{time_now()} now: {float(bal.get("in_btc"))}')
                     print(f'{time_now()} off {self.starting_btc * 0.8}')
                     if l_bal >= r_bal:
                         side = 'sell'
-                        amount = bal[self.left]
+                        amount = bal[self.left] * 0.98
                         price = tik['bid']
                         print(self.create_order(price=price, qty=amount, side=side, symbol=self.pair))
                     else:
                         side = 'buy'
-                        amount = bal[self.right]
+                        amount = bal[self.right] * 0.98
                         price = tik['ask']
                         print(self.create_order(price=price, qty=amount, side=side, symbol=self.pair))
                 else:
                     self.role = Role.REVERSER
             elif self.role == Role.REVERSER:
                 my_token = self.get_pair_balance(asset='BTMX')
-                if my_token['BTMX'] < 1:
+                if my_token['BTMX'] < 0.5:
                     self.role = Role.MINER
+                    return
                 if l_bal >= r_bal:
                     side = 'sell'
-                    amount = bal[self.left]
+                    amount = bal[self.left] * 0.98
                     price = tik['ask']
                     self.create_order(price=price, qty=amount, side=side, symbol=self.pair)
                 else:
                     side = 'buy'
-                    amount = bal[self.right]
+                    amount = bal[self.right] * 0.98
                     price = tik['bid']
                     self.create_order(price=price, qty=amount, side=side, symbol=self.pair)
 
@@ -113,10 +114,8 @@ class Bot:
         ReqCounter.add()
         for data in send_request(method='GET', base_path='api/v1/products'):
             if isinstance(data, dict):
-                if \
-                        data.get('status') == 'Normal' and \
-                        data.get('miningStatus') == 'Mining,ReverseMining' and \
-                        data.get('symbol') == self.pair:
+                if data.get('status') == 'Normal' and data.get('miningStatus') == 'Mining,ReverseMining' and data.get(
+                        'symbol') == self.pair:
                     self.max_amount = float(data['maxNotional'])
                     self.min_amount = float(data['minNotional'])
                     self.price_scale = int(data['priceScale'])
@@ -204,7 +203,7 @@ class Bot:
             time=ts,
             symbol=symbol,
             orderPrice=str(price),
-            orderQty=str(qty * 0.99),
+            orderQty=str(qty * 0.95),
             orderType='limit',
             side=side
         )
@@ -232,7 +231,7 @@ def request_limiter(profitbot: Bot):
 
 
 def start(profitbot: Bot):
-    # countdown(2)
+    countdown(3)
     profitbot.loop_state = 'ok'
     if profitbot.check_online():
         profitbot.setup_pair()

@@ -183,7 +183,7 @@ def send_request(
         if response and response.status_code == 200:
             t = response.json()
 
-            print(f'Total: {r.get_total()}')
+            # print(f'Total: {r.get_total()}')
             return t
         else:
             raise ReqError()
